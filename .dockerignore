@@ -1,4 +1,4 @@
 *
-src/
-static/
-Cargo.toml
+!src/
+!static/
+!Cargo.toml
