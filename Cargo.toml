@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-comrak = "0.28.0"
-hyper = { version = "1.4.1", features = ["server"] }
-hyper-util = "0.1.8"
-tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread", "macros"] }
+comrak = { version = "0.28.0", features = ["syntect", "emojis"], default-features = false }
+http-body-util = "0.1.2"
+hyper = { version = "1.4.1", features = ["http1", "http2", "server"] }
+hyper-util = { version = "0.1.8", features = ["tokio"] }
+tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread", "macros", "io-std"] }
+log = "0.4.22"
+url = "2.5.2"

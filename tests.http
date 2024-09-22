@@ -1,0 +1,6 @@
+###
+GET http://{{host}}:{{port}}
+
+###
+GET http://{{host}}:{{port}}/it?is=fun&isnt=it
+
