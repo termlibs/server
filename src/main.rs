@@ -1,7 +1,7 @@
 mod static_site;
 
 use std::convert::Infallible;
-use std::error;
+use std::{env, error};
 use std::net::{SocketAddr};
 use hyper::body::Bytes;
 use http_body_util::Full;
@@ -32,11 +32,14 @@ async fn root_handler(req: Request<hyper::body::Incoming>) -> Result<Response<Fu
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn error::Error + Send + Sync>> {
-  let ip4 = [127, 0, 0, 1];
-  let port = 9090;
+  let port = env::var("PORT")?.parse::<u16>().unwrap();
+  let _log_level = env::var("LOG_LEVEL")?;
+  let listen_ip: [u8; 4] = env::var("LISTEN_IP")?.split(".").map(
+    |s| s.parse::<u8>().unwrap()
+  ).collect::<Vec<u8>>().try_into().unwrap();
 
-  info!("starting server at {:?}:{}", ip4, port);
-  let addr = SocketAddr::from((ip4, port));
+  info!("starting server at {:?}:{}", listen_ip, port);
+  let addr = SocketAddr::from((listen_ip, port));
   let tcp = TcpListener::bind(addr).await?;
 
   loop {

@@ -7,6 +7,6 @@ RUN cargo build --release
 
 FROM scratch AS runtime
 
-COPY --from=build /root/build/target/release/server /
+COPY --from=build /root/build/target/release/termlib-server /
 
-ENTRYPOINT ["/server"]
+ENTRYPOINT ["/termlib-server"]
