@@ -1,4 +1,4 @@
-#syntax=docker/dockerfile:1.5
+# syntax=docker/dockerfile:1
 FROM rust:alpine3.20 AS build
 
 WORKDIR /root/build
