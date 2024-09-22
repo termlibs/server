@@ -1,0 +1,10 @@
+[package]
+name = "termlib-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+comrak = "0.28.0"
+hyper = { version = "1.4.1", features = ["server"] }
+hyper-util = "0.1.8"
+tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread", "macros"] }
