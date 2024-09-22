@@ -10,14 +10,17 @@ const HEAD: &str = concat!(
   "</style></head><body>"
 );
 
+pub(crate) fn wrap_body(html: &str) -> String {
+  format!("{}{}</body>", HEAD , html)
+}
+
 pub(crate) fn load_static(_path: &str) -> Option<String> {
   let tree = BTreeMap::from(STATIC_FILES);
   let md = tree.get("index.html");
   match md {
     Some(md) => {
       let html = markdown_to_html(md, &Options::default());
-      print!("{}", html);
-      let out = format!("{}{}</body>", HEAD , html.as_str());
+      let out = wrap_body(html.as_str());
       Some(out)
     }
     None => None,

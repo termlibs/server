@@ -1,58 +1,76 @@
+#[macro_use]
+extern crate rocket;
 mod static_site;
 
-use std::convert::Infallible;
-use std::{env, error};
-use std::net::{SocketAddr};
-use hyper::body::Bytes;
-use http_body_util::Full;
-use hyper::{Request, Response};
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper_util::rt::TokioIo;
 use log::{error, info};
+use rocket::{response, Request, Response};
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::{env, error};
+use std::ops::Deref;
+use rocket::futures::io::Cursor;
+use rocket::http::ContentType;
+use rocket::response::{content, Responder};
+use rocket::serde::Deserialize;
 use tokio::net::TcpListener;
 use url::Url;
 
-async fn root_handler(req: Request<hyper::body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
-  println!("{:?}", req);
-  let html = static_site::load_static("/");
-  match html {
-    Some(html) => {
-      Ok(
-        Response::new(
-          Full::new(
-            Bytes::from(html)
-          )
-        )
-      )
+fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
+  let log_level = log_level.to_uppercase();
+  let level = match log_level.as_str() {
+    "DEBUG" => log::LevelFilter::Debug,
+    "INFO" => log::LevelFilter::Info,
+    "WARN" => log::LevelFilter::Warn,
+    "ERROR" => log::LevelFilter::Error,
+    _ => log::LevelFilter::Info
+  };
+  let _ = fern::Dispatch::new().format(
+    |out, message, record| {
+      out.finish(format_args!(
+        "{} {}: {}",
+        chrono::Local::now().format("[%Y-%m-%d %H:%M:%S]"),
+        record.level(),
+        message
+      ));
     }
-    None => Ok(Response::new(Full::new(Bytes::from("err"))))
-  }
+  ).level(level).chain(std::io::stdout()).apply()?;
+  Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn error::Error + Send + Sync>> {
-  let port = env::var("PORT").unwrap_or("8080".to_string()).parse::<u16>().unwrap();
-  let _log_level = env::var("LOG_LEVEL").unwrap_or("DEBUG".to_string());
-  let listen_ip: [u8; 4] = env::var("LISTEN_IP").unwrap_or("0.0.0.0".to_string())
-    .split(".").map(
-    |s| s.parse::<u8>().unwrap()
-  ).collect::<Vec<u8>>().try_into().unwrap();
+#[catch(404)]
+fn not_found(req: &Request) -> content::RawHtml<String> {
+  info!("{:?}", req);
+  let response = content::RawHtml("404".to_string());
+  response
+}
+
+#[get("/<extra..>")]
+async fn root_handler(extra: PathBuf) -> content::RawHtml<String> {
+  info!("{:?}", extra);
+  let html = static_site::load_static("/").unwrap_or("".to_string());
+  let response = content::RawHtml(html);
+  response
+}
+
+#[launch]
+async fn rocket() -> _ {
+  let port = env::var("PORT").unwrap_or("8081".to_string()).parse::<u16>().unwrap();
+  let log_level = env::var("LOG_LEVEL").unwrap_or("DEBUG".to_string());
+  let listen_ip: String = env::var("LISTEN_IP").unwrap_or("0.0.0.0".to_string());
+
+  let _ = setup_logger(log_level.as_str()).unwrap_or(());
 
   info!("starting server at {:?}:{}", listen_ip, port);
-  let addr = SocketAddr::from((listen_ip, port));
-  let tcp = TcpListener::bind(addr).await?;
 
-  loop {
-    let (stream, _) = tcp.accept().await?;
-
-    let io = TokioIo::new(stream);
-    tokio::task::spawn(
-      async move {
-        if let Err(err) = http1::Builder::new().serve_connection(io, service_fn(root_handler)).await {
-          error!("unable to handle connection {:?}", err)
-        }
-      }
-    );
-  }
+  let figment = rocket::Config::figment()
+    .merge(("port", port))
+    .merge(("address", listen_ip))
+    .merge(("ident", "termlibs".to_string()));
+  rocket::custom(figment).mount(
+    "/", routes![
+      // not_found,
+      root_handler
+    ],
+  )
 }
