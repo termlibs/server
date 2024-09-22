@@ -1,15 +1,13 @@
-# syntax=docker/dockerfile:1
 FROM rust:alpine3.20 AS build
 
 WORKDIR /root/build
 COPY . /root/build
 
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
-RUN <<INSTRUCT
-apk update
-apk add musl-dev
-cargo build --release
-INSTRUCT
+RUN \
+  apk update && \
+  apk add musl-dev && \
+  cargo build --release
 
 FROM scratch AS runtime
 
