@@ -33,7 +33,7 @@ async fn root_handler(req: Request<hyper::body::Incoming>) -> Result<Response<Fu
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn error::Error + Send + Sync>> {
   let port = env::var("PORT").unwrap_or("8080".to_string()).parse::<u16>().unwrap();
-  let _log_level = env::var("LOG_LEVEL")?;
+  let _log_level = env::var("LOG_LEVEL").unwrap_or("DEBUG".to_string());
   let listen_ip: [u8; 4] = env::var("LISTEN_IP").unwrap_or("0.0.0.0".to_string())
     .split(".").map(
     |s| s.parse::<u8>().unwrap()
