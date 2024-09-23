@@ -1,0 +1,9 @@
+[submodule "termlibs/logging.sh"]
+	path = termlibs/logging.sh
+	url = https://github.com/termlibs/logging.sh
+[submodule "termlibs/install.sh"]
+	path = termlibs/install.sh
+	url = https://github.com/termlibs/install.sh
+[submodule "termlibs/build.sh"]
+	path = termlibs/build.sh
+	url = https://github.com/termlibs/build.sh

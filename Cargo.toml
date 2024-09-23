@@ -8,6 +8,8 @@ comrak = { version = "0.28.0", features = ["syntect", "emojis"], default-feature
 tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread", "macros", "io-std"] }
 log = "0.4.22"
 url = "2.5.2"
-rocket = "0.5.1"
+rocket = { version = "0.5.1", features = ["json"] }
 fern = { version = "0.6.2", features = ["chrono", "colored"] }
 chrono = "0.4.38"
+gix = { version = "0.66.0", features = ["async-network-client", "async-network-client-async-std"] }
+tempfile = "3.12.0"

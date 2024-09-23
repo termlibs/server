@@ -2,3 +2,5 @@
 !src/
 !static/
 !Cargo.toml
+
+!termlibs/*/**/*.sh

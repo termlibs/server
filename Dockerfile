@@ -9,8 +9,10 @@ RUN \
   apk add musl-dev && \
   cargo build --release
 
-FROM scratch AS runtime
+FROM alpine:3.20 AS runtime
 
-COPY --from=build /root/build/target/release/termlib-server /
-
-ENTRYPOINT ["/termlib-server"]
+USER 1000
+WORKDIR /
+COPY --chown=1000:1000 --from=build /root/build/target/release/termlib-server /usr/bin/termlib-server
+COPY --chown=1000:1000 --from=build /root/build/termlibs /termlibs
+ENTRYPOINT ["termlib-server"]
