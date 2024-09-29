@@ -4,6 +4,7 @@ extern crate core;
 
 mod static_site;
 mod shell_files;
+mod types;
 
 use comrak::Options;
 use log::{error, info};
@@ -16,8 +17,18 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::{env, error};
+use std::{env, error, path};
+use std::env::join_paths;
+use std::sync::LazyLock;
+use rocket::http::uri::fmt::Kind::Path;
+use rocket::serde::__private::de::Content;
 use tokio::net::TcpListener;
+use types::InstallQueryOptions;
+
+const FAVICON: &[u8] = include_bytes!("../favicon.ico");
+const TERMLIBS_ROOT: LazyLock<PathBuf> = LazyLock::new(
+  || PathBuf::from(env::var("TERMLIBS_ROOT").unwrap_or("../../".into()))
+);
 
 fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
   let log_level = log_level.to_uppercase();
@@ -48,42 +59,16 @@ fn not_found(_req: &Request) -> content::RawHtml<String> {
   response
 }
 
-#[derive(Debug, PartialEq, FromForm)]
-struct InstallQueryOptions {
-  version: Option<String>,
-  prefix: Option<String>,
-}
-
-impl InstallQueryOptions {
-  fn version(&self) -> String {
-    self.version.clone().unwrap_or("latest".to_string())
-  }
-
-  fn prefix(&self) -> String {
-    self.prefix.clone().unwrap_or("$HOME/.local".to_string())
-  }
-
-  fn to_args(&self) -> String {
-    format!("--version=\"{}\" --prefix=\"{}\"", self.version(), self.prefix())
-  }
-
-  fn is_none(&self) -> bool {
-    self.prefix.clone().is_none() && self.version.clone().is_none()
-  }
-
-  fn is_some(&self) -> bool {
-    !self.is_none().clone()
-  }
+#[get("/favicon.ico")]
+async fn favicon<'r>() -> (ContentType, Vec<u8>) {
+  (ContentType::Icon, FAVICON.to_vec())
 }
 
 #[get("/install/<app>?<q..>", rank = 1)]
-async fn install_handler(app: &str, q: InstallQueryOptions) -> String {
-  info!("{:?}", app);
-  info!("{:?}", q);
-  let version = q.version();
-  let prefix = q.prefix();
-  let args = if q.is_some() { Some(q.to_args()) } else { None };
-  let output = shell_files::open_file("install.sh/scripts/install_all.sh", args).await.unwrap();
+async fn install_handler(app: &str, mut q: InstallQueryOptions) -> String {
+  info!("{:?} {:?}", app, q);
+  q.set_app(app.to_owned());
+  let output = shell_files::open_file(Some(q)).await.unwrap();
   output
 }
 
@@ -99,7 +84,7 @@ async fn root_handler() -> content::RawHtml<String> {
 async fn rocket() -> _ {
   let port = env::var("PORT").unwrap_or("8080".to_string()).parse::<u16>().unwrap();
   let log_level = env::var("LOG_LEVEL").unwrap_or("DEBUG".to_string());
-  let listen_ip: String = env::var("LISTEN_IP").unwrap_or("0.0.0.0".to_string());
+  let listen_ip: String = env::var("LISTEN").unwrap_or("0.0.0.0".to_string());
 
   let _ = setup_logger(log_level.as_str()).unwrap_or(());
 
@@ -111,6 +96,7 @@ async fn rocket() -> _ {
     .merge(("ident", "termlibs".to_string()));
   rocket::custom(figment).register("/", catchers![not_found]).mount(
     "/", routes![
+      favicon,
       install_handler,
       root_handler
     ],
