@@ -1,8 +1,5 @@
 FROM rust:alpine3.20 AS build
 
-WORKDIR /root/build
-COPY . /root/build
-
 RUN apk update && apk add musl-dev git
 
 RUN  mkdir -p /root/termlibs && \
@@ -11,6 +8,8 @@ RUN  mkdir -p /root/termlibs && \
       git -C /root/termlibs clone --single-branch https://github.com/termlibs/logging.sh.git && \
       git -C /root/termlibs clone --single-branch https://github.com/termlibs/build.sh.git
 
+WORKDIR /root/build
+COPY . /root/build
 RUN cargo build --release
 
 FROM alpine:3.20 AS runtime

@@ -11,5 +11,4 @@ url = "2.5.2"
 rocket = { version = "0.5.1", features = ["json"] }
 fern = { version = "0.6.2", features = ["chrono", "colored"] }
 chrono = "0.4.38"
-gix = { version = "0.66.0", features = ["async-network-client", "async-network-client-async-std"] }
 tempfile = "3.12.0"
