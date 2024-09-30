@@ -2,5 +2,5 @@
 !src/
 !static/
 !Cargo.toml
-
+!favicon.ico
 !termlibs/*/**/*.sh
