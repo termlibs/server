@@ -3,16 +3,21 @@ FROM rust:alpine3.20 AS build
 WORKDIR /root/build
 COPY . /root/build
 
-SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
-RUN \
-  apk update && \
-  apk add musl-dev && \
-  cargo build --release
+RUN apk update && apk add musl-dev git
+
+RUN  mkdir -p /root/termlibs && \
+      git -C /root/termlibs clone --single-branch https://github.com/termlibs/install.sh.git && \
+      git -C /root/termlibs clone --single-branch https://github.com/termlibs/json.sh.git && \
+      git -C /root/termlibs clone --single-branch https://github.com/termlibs/logging.sh.git && \
+      git -C /root/termlibs clone --single-branch https://github.com/termlibs/build.sh.git
+
+RUN cargo build --release
 
 FROM alpine:3.20 AS runtime
 
 USER 1000
 WORKDIR /
 COPY --chown=1000:1000 --from=build /root/build/target/release/termlib-server /usr/bin/termlib-server
-COPY --chown=1000:1000 --from=build /root/build/termlibs /termlibs
+COPY --chown=1000:1000 --from=build /root/termlibs /etc/termlibs
+ENV TERMLIBS_ROOT=/etc/termlibs
 ENTRYPOINT ["termlib-server"]
