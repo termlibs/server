@@ -12,7 +12,7 @@ use rocket::futures::io::Cursor;
 use rocket::http::ContentType;
 use rocket::response::{content, Responder};
 use rocket::serde::Deserialize;
-use rocket::{response, Request, Response};
+use rocket::{http, response, Request, Response};
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::ops::Deref;
@@ -20,14 +20,17 @@ use std::path::PathBuf;
 use std::{env, error, path};
 use std::env::join_paths;
 use std::sync::LazyLock;
+use rocket::form::validate::Len;
+use rocket::http::hyper::header::CONTENT_DISPOSITION;
 use rocket::http::uri::fmt::Kind::Path;
 use rocket::serde::__private::de::Content;
 use tokio::net::TcpListener;
 use types::InstallQueryOptions;
+use crate::types::ScriptResponse;
 
 const FAVICON: &[u8] = include_bytes!("../favicon.ico");
 const TERMLIBS_ROOT: LazyLock<PathBuf> = LazyLock::new(
-  || PathBuf::from(env::var("TERMLIBS_ROOT").unwrap_or("../../".into()))
+  || PathBuf::from(env::var("TERMLIBS_ROOT").unwrap_or("../".into()))
 );
 
 fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
@@ -65,11 +68,12 @@ async fn favicon<'r>() -> (ContentType, Vec<u8>) {
 }
 
 #[get("/install/<app>?<q..>", rank = 1)]
-async fn install_handler(app: &str, mut q: InstallQueryOptions) -> String {
+async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptResponse {
   info!("{:?} {:?}", app, q);
   q.set_app(app.to_owned());
-  let output = shell_files::open_file(Some(q)).await.unwrap();
-  output
+  let output = shell_files::create_install_script(Some(q)).await.unwrap();
+  let r = ScriptResponse::new(format!("install-{}.sh", app), output);
+  r
 }
 
 #[get("/", rank = 10)]

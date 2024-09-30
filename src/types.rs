@@ -1,3 +1,9 @@
+use std::io::Cursor;
+use rocket::http::{ContentType, Status};
+use rocket::{response, Request, Response, http};
+use rocket::http::hyper::header::CONTENT_DISPOSITION;
+use rocket::response::Responder;
+
 pub(crate) trait QueryOptions {
   fn to_args(&self) -> String;
 }
@@ -38,5 +44,37 @@ impl InstallQueryOptions {
 
   pub(crate) fn set_app(&mut self, app: String) {
     self.app = Some(app);
+  }
+}
+
+pub(crate) struct ScriptResponse {
+  filename: String,
+  body: Cursor<Vec<u8>>,
+  body_size: usize,
+}
+
+impl ScriptResponse {
+  pub(crate) fn new(filename: String, body: String) -> ScriptResponse {
+    let body = body.into_bytes();
+    let body_size = body.len();
+    let body = Cursor::new(body);
+
+    ScriptResponse {
+      filename,
+      body,
+      body_size,
+    }
+  }
+}
+
+impl<'r> Responder<'r, 'static> for ScriptResponse {
+  fn respond_to(self, _req: &Request) -> response::Result<'static> {
+    let content_type = ContentType::new("application", "x-sh");
+    Response::build()
+      .status(Status::Ok)
+      .header(content_type)
+      .sized_body(self.body_size, self.body)
+      .header(http::Header::new(CONTENT_DISPOSITION.as_str(), format!("inline; filename=\"{}\"", self.filename)))
+      .ok()
   }
 }
