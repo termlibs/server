@@ -5,17 +5,13 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  CLONE_DIR: server
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: ${{env.CLONE_DIR}}
-      - run: echo "SHORTREF=$(git -C ${{CLONE_DIR}} rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - run: echo "SHORTREF=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - uses: google-github-actions/auth@v2
         with:
           project_id: termlibs
@@ -27,7 +23,7 @@ jobs:
       - name: build and push
         uses: docker/build-push-action@v6
         with:
-          context: ${{env.CLONE_DIR}}
+          context: .
           file: server/Dockerfile
           push: true
           tags: gcr.io/termlibs/images/server:${{env.SHORTREF}}
