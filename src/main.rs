@@ -7,17 +7,17 @@ mod static_site;
 mod types;
 
 use crate::types::ScriptResponse;
-use log::{error, info};
+use log::info;
 use rocket::http::ContentType;
-use rocket::response::{content, Responder};
-use rocket::{http, response, Request, Response};
+use rocket::response::content;
+use rocket::Request;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::env;
 use types::InstallQueryOptions;
 
 const FAVICON: &[u8] = include_bytes!("../favicon.ico");
-const TERMLIBS_ROOT: LazyLock<PathBuf> =
+static  TERMLIBS_ROOT: LazyLock<PathBuf> =
   LazyLock::new(|| PathBuf::from(env::var("TERMLIBS_ROOT").unwrap_or("../".into())));
 
 fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
@@ -29,7 +29,7 @@ fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
     "ERROR" => log::LevelFilter::Error,
     _ => log::LevelFilter::Info,
   };
-  let _ = fern::Dispatch::new()
+  fern::Dispatch::new()
     .format(|out, message, record| {
       out.finish(format_args!(
         "{} {}: {}",
@@ -47,8 +47,7 @@ fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
 #[catch(404)]
 fn not_found(_req: &Request) -> content::RawHtml<String> {
   let html = static_site::load_static("404.html").unwrap_or("".to_string());
-  let response = content::RawHtml(html);
-  response
+  content::RawHtml(html)
 }
 
 #[get("/favicon.ico")]
@@ -61,16 +60,14 @@ async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptRespons
   info!("{:?} {:?}", app, q);
   q.set_app(app.to_owned());
   let output = shell_files::create_install_script(Some(q)).await.unwrap();
-  let r = ScriptResponse::new(format!("install-{}.sh", app), output);
-  r
+  ScriptResponse::new(format!("install-{}.sh", app), output)
 }
 
 #[get("/", rank = 10)]
 async fn root_handler() -> content::RawHtml<String> {
   info!("{:?}", "root");
   let html = static_site::load_static("index.html").unwrap_or("".to_string());
-  let response = content::RawHtml(html);
-  response
+  content::RawHtml(html)
 }
 
 #[launch]
@@ -82,7 +79,7 @@ async fn rocket() -> _ {
   let log_level = env::var("LOG_LEVEL").unwrap_or("DEBUG".to_string());
   let listen_ip: String = env::var("LISTEN").unwrap_or("0.0.0.0".to_string());
 
-  let _ = setup_logger(log_level.as_str()).unwrap_or(());
+  setup_logger(log_level.as_str()).unwrap_or(());
 
   info!("starting server at {:?}:{}", listen_ip, port);
 

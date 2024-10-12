@@ -1,11 +1,9 @@
-use crate::types::{InstallQueryOptions, QueryOptions};
+use crate::types::QueryOptions;
 use crate::TERMLIBS_ROOT;
-use std::env;
-use std::env::join_paths;
 use std::error::Error;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::string::ToString;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -19,7 +17,7 @@ pub(crate) async fn create_install_script<T: QueryOptions + Debug>(
     args: Option<T>,
 ) -> Result<String, Box<dyn Error>> {
     let script_path = APP_FILES.iter().find(|(x, _)| x == &"install").unwrap().1;
-    let filepath: PathBuf = PathBuf::from(TERMLIBS_ROOT.deref()).join(PathBuf::from(script_path));
+    let filepath: PathBuf = PathBuf::from(&TERMLIBS_ROOT.deref()).join(PathBuf::from(script_path));
     let argstring = args.as_ref().unwrap().to_args();
 
     info!("Opening {:?} with arguments {:?}", filepath, argstring);

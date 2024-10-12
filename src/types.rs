@@ -45,7 +45,7 @@ impl InstallQueryOptions {
   }
   #[allow(dead_code)]
   pub(crate) fn is_some(&self) -> bool {
-    !self.is_none().clone()
+    !self.is_none()
   }
 
   pub(crate) fn set_app(&mut self, app: String) {
