@@ -28,7 +28,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: server/Dockerfile
+          file: Dockerfile
           push: true
           tags: gcr.io/termlibs/images/server:${{steps.tag.outputs.SHORTREF}}
       - id: deploy
