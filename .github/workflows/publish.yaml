@@ -14,7 +14,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - run: echo "SHORTREF=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - id: tag
+        run: echo "SHORTREF=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - uses: google-github-actions/auth@v2
         with:
           project_id: termlibs
@@ -29,9 +30,9 @@ jobs:
           context: .
           file: server/Dockerfile
           push: true
-          tags: gcr.io/termlibs/images/server:${{env.SHORTREF}}
+          tags: gcr.io/termlibs/images/server:${{steps.tag.outputs.SHORTREF}}
       - id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: server
-          image: gcr.io/termlibs/images/server:${{env.SHORTREF}}
+          image: gcr.io/termlibs/images/server:${{steps.tag.outputs.SHORTREF}}
