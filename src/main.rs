@@ -55,6 +55,14 @@ async fn favicon<'r>() -> (ContentType, Vec<u8>) {
   (ContentType::Icon, FAVICON.to_vec())
 }
 
+#[get("/install", rank = 2)]
+async fn install_handler_root() -> ScriptResponse {
+  info!("{:?}", "install");
+  let args: Option<InstallQueryOptions> = None;
+  let output = shell_files::create_install_script(args).await.unwrap();
+  ScriptResponse::new("install.sh".to_string(), output)
+}
+
 #[get("/install/<app>?<q..>", rank = 1)]
 async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptResponse {
   info!("{:?} {:?}", app, q);
@@ -89,5 +97,5 @@ async fn rocket() -> _ {
     .merge(("ident", "termlibs".to_string()));
   rocket::custom(figment)
     .register("/", catchers![not_found])
-    .mount("/", routes![favicon, install_handler, root_handler])
+    .mount("/", routes![favicon, install_handler, install_handler_root, root_handler])
 }

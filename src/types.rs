@@ -17,22 +17,25 @@ pub struct InstallQueryOptions {
 
 impl QueryOptions for InstallQueryOptions {
   fn to_args(&self) -> String {
-    format!(
-      "--version=\"{}\" --prefix=\"{}\" \"{}\"",
-      self.version(),
-      self.prefix(),
-      self.app()
-    )
+    let mut args_out: Vec<String> = vec![];
+    if let Some(v) = self.version.clone() {
+      args_out.push(format!("--version={}", v));
+    }
+    if let Some(p) = self.prefix.clone() {
+      args_out.push(format!("--prefix={}", p));
+    }
+    args_out.push(self.app.clone().unwrap());
+    args_out.join(" ")
   }
 }
 
 impl InstallQueryOptions {
-  pub(crate) fn version(&self) -> String {
-    self.version.clone().unwrap_or("latest".to_string())
+  pub(crate) fn version(&self) -> Option<String> {
+    self.version.clone()
   }
 
-  pub(crate) fn prefix(&self) -> String {
-    self.prefix.clone().unwrap_or("$HOME/.local".to_string())
+  pub(crate) fn prefix(&self) -> Option<String> {
+    self.prefix.clone()
   }
 
   pub(crate) fn app(&self) -> String {
