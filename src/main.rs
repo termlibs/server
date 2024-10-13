@@ -57,7 +57,7 @@ async fn favicon<'r>() -> (ContentType, Vec<u8>) {
 
 #[get("/install", rank = 2)]
 async fn install_handler_root() -> ScriptResponse {
-    info!("{:?}", "install");
+    info!("install_handler_root()");
     let args: Option<InstallQueryOptions> = None;
     let output = shell_files::create_install_script(args).await.unwrap();
     ScriptResponse::new("install.sh".to_string(), output)
@@ -65,7 +65,7 @@ async fn install_handler_root() -> ScriptResponse {
 
 #[get("/install/<app>?<q..>", rank = 1)]
 async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptResponse {
-    info!("{:?} {:?}", app, q);
+    info!("install_handler({:?}, {:?})", app, q);
     q.set_app(app.to_owned());
     let output = shell_files::create_install_script(Some(q)).await.unwrap();
     ScriptResponse::new(format!("install-{}.sh", app), output)

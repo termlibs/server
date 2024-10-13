@@ -17,12 +17,17 @@ pub(crate) async fn create_install_script<T: QueryOptions + Debug>(
     args: Option<T>,
 ) -> Result<String, Box<dyn Error>> {
     let script_path = APP_FILES.iter().find(|(x, _)| x == &"install").unwrap().1;
+    debug!(
+        "Creating script {:?} with provided info, from root  dir {:?}",
+        script_path,
+        TERMLIBS_ROOT.deref()
+    );
     let filepath: PathBuf = PathBuf::from(&TERMLIBS_ROOT.deref()).join(PathBuf::from(script_path));
+    debug!("Opening script {:?}", filepath);
     let mut script = File::open(filepath).await?;
     let mut data: String = String::new();
     let _ = script.read_to_string(&mut data).await?;
     let mut lines: Vec<String> = vec![];
-    info!("Opening script {:?}", TERMLIBS_ROOT);
 
     match args {
         Some(a) => {
