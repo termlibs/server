@@ -1,0 +1,11 @@
+shortname,repo,source,file_pattern,archive_path,archive_depth,custom_release_tag
+yq,mikefarah/yq,github,yq_linux_amd64,-,-,-
+jq,jqlang/jq,github,jq-linux_amd64,-,-,jq-VERSION
+gh,cli/cli,github,gh_VERSION_linux_amd64.tar.gz,gh_*_linux_amd64/bin/gh,2,-
+helm,get.helm.sh,url,helm-vVERSION-linux-amd64.tar.gz,linux-amd64/helm,1,-
+jsonnet,google/go-jsonnet,github,go-jsonnet_VERSION_Linux_x86_64.tar.gz,jsonnet,0,-
+shellcheck,koalaman/shellcheck,github,shellcheck-vVERSION.linux.x86_64.tar.xz,shellcheck-vVERSION/shellcheck,1,-
+shfmt,mvdan/sh,github,shfmt_vVERSION_darwin_amd64,-,-,-
+terraform,releases.hashicorp.com,url,terraform/VERSION/terraform_VERSION_linux_amd64.zip,terraform,0,-
+yutc,adam-huganir/yutc,github,yutc-linux-amd64,-,-,-
+glances,-,pip,glances,-,-,-

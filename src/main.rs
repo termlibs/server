@@ -5,6 +5,9 @@ extern crate rocket;
 mod shell_files;
 mod static_site;
 mod types;
+mod app_downloader;
+mod gh;
+mod templates;
 
 use crate::types::ScriptResponse;
 use log::info;

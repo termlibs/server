@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+_QUIET=${QUIET:-false} #{{ quiet | escape_shell }}
+_COMMAND_NAME="yutc" #{{ command_name | escape_shell }}
+_FILE_URL=https://google.com #{{ file_url | escape_shell }}
+
+
+_E_GENERIC_ERROR=10
+_TMPDIR="$(mktemp -d)"
+cd "$_TMPDIR"
+trap "[ -d \"$_TMPDIR\" ] && rm -rf \"$_TMPDIR\"" EXIT
+
+INSTALL_LOG_LEVEL=DEBUG #{{ install_log_level | escape_shell }}
+case "$INSTALL_LOG_LEVEL" in
+    TRACE)
+      INSTALL_LOG_LEVEL=0
+      set -x
+    ;;
+    DEBUG)
+      INSTALL_LOG_LEVEL=1
+    ;;
+    INFO)
+      INSTALL_LOG_LEVEL=2
+    ;;
+    WARN)
+      INSTALL_LOG_LEVEL=3
+    ;;
+    ERROR)
+      INSTALL_LOG_LEVEL=4
+    ;;
+    FATAL)
+      INSTALL_LOG_LEVEL=5
+    ;;
+    *)
+      INSTALL_LOG_LEVEL=2
+      _log ERROR "invalid log level: $INSTALL_LOG_LEVEL, using INFO"
+esac
+      
+
+
+_log() {
+   case "$1" in
+      DEBUG)
+        [ "$INSTALL_LOG_LEVEL" -le 1 ] || return
+        echo "DEBUG: $2" >&2
+        ;;
+      INFO)
+        [ "$INSTALL_LOG_LEVEL" -le 2 ] || return
+        echo "INFO: $2" >&2
+        ;;
+      WARN)
+        [ "$INSTALL_LOG_LEVEL" -le 3 ] || return
+        echo "WARN: $2" >&2
+        ;;
+      ERROR)
+        [ "$INSTALL_LOG_LEVEL" -le 4 ] || return
+        echo "ERROR: $2" >&2
+        ;;
+      FATAL)
+        [ "$INSTALL_LOG_LEVEL" -le 5 ] || return
+        echo "FATAL: $2" >&2
+        exit 100
+        ;;
+      *)
+        return 1
+        ;;
+   esac
+}
+
+_ask () {
+    [ "$_QUIET" = true ] && return
+    local opts DEFAULT
+    opts="$(getopt -o "d:" --long "default:" -n "${FUNCNAME[0]}" -- "$@")"
+    [ $? -eq 0 ] || return 1
+    eval set -- "$opts"
+    DEFAULT=yes
+    while true; do
+      case "$1" in
+        -d | --default)
+          DEFAULT="$2"
+          _log DEBUG "Using custom default, $DEFAULT"
+          shift 2
+          ;;
+        --)
+          shift
+          break
+          ;;
+      esac
+    done
+    local prompt="$1"
+    local answer
+    read -r -p "$prompt ($DEFAULT): " answer
+    [ -z "$answer" ] && answer="$DEFAULT"
+    printf "$answer"
+}
+
+_ask_yn () {
+    [ "$_QUIET" = true ] && return
+    _log DEBUG "Asking: $@"
+    local answer
+    answer="$(_ask "$@")"
+    case "$answer" in
+      Y | y | yes)
+        return 0
+        ;;
+      N | n | no)
+        return 1
+        ;;
+      *)
+        _log FATAL "invalid answer: $answer, using 'no'"
+        ;;
+    esac
+}
+
+_urlget() {
+  if command -v curl &> /dev/null; then
+    curl -fsSLo - "$1" 2> /dev/null
+  elif command -v wget &> /dev/null; then
+    wget -qO- "$1" 2> /dev/null
+  else
+    _log ERROR "neither curl nor wget found, unable to download files"
+    return "$_E_GENERIC_ERROR"
+  fi
+}
+
+_ask_yn -d n "Download $_FILE_URL?" || exit 2
+_urlget "$_FILE_URL" > "$_TMPDIR/${_COMMAND_NAME}"
+ls -lh

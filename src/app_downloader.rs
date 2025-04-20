@@ -1,0 +1,562 @@
+use std::fmt::Display;
+
+#[derive(PartialEq, Debug)]
+pub enum ArchiveType {
+    Tar,
+    TarGz,
+    TarBz2,
+    TarXz,
+    _7z,
+    Zip,
+    Unknown,
+    Rar,
+    Gzip,
+}
+
+impl Display for ArchiveType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ArchiveType::Tar => write!(f, "tar"),
+            ArchiveType::TarGz => write!(f, "tar.gz"),
+            ArchiveType::TarBz2 => write!(f, "tar.bz2"),
+            ArchiveType::TarXz => write!(f, "tar.xz"),
+            ArchiveType::_7z => write!(f, "7z"),
+            ArchiveType::Zip => write!(f, "zip"),
+            ArchiveType::Rar => write!(f, "rar"),
+            ArchiveType::Gzip => write!(f, "gz"),
+            ArchiveType::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+impl ArchiveType {
+    fn identify(input: &str) -> ArchiveType {
+        let tar = ["tar"];
+        let tar_gz = ["tar.gz", "tgz"];
+        let tar_bz2 = ["tar.bz2"];
+        let tar_xz = ["tar.xz"];
+        let z7z = ["7z"];
+        let rar = ["rar"];
+        let gz = ["gz"];
+        let zip = ["zip"];
+
+        if tar.iter().any(|x| input.ends_with(x)) {
+            return ArchiveType::Tar;
+        }
+        if tar_gz.iter().any(|x| input.ends_with(x)) {
+            return ArchiveType::TarGz;
+        }
+        if tar_bz2.iter().any(|x| input.ends_with(x)) {
+            return ArchiveType::TarBz2;
+        }
+        if tar_xz.iter().any(|x| input.ends_with(x)) {
+            return ArchiveType::TarXz;
+        }
+        if z7z.iter().any(|x| input.ends_with(x)) {
+            return ArchiveType::_7z;
+        }
+        if zip.iter().any(|x| input.ends_with(x)) {
+            return ArchiveType::Zip;
+        }
+        if rar.iter().any(|x| input.ends_with(x)) {
+            return ArchiveType::Rar;
+        }
+        // should be last since it's sometimes a part of a compound
+        if gz.iter().any(|x| input.ends_with(x)) {
+            return ArchiveType::Gzip;
+        }
+        ArchiveType::Unknown
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum Filetype {
+    Binary,
+    Installer,
+    Archive(ArchiveType),
+    Unknown,
+}
+
+impl Display for Filetype {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Filetype::Binary => write!(f, "binary"),
+            Filetype::Archive(x) => write!(f, "{}", x),
+            Filetype::Installer => write!(f, "installer"),
+            Filetype::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+impl Filetype {
+    fn identify(input: &str) -> Filetype {
+        let archive = ArchiveType::identify(input);
+        if archive != ArchiveType::Unknown {
+            return Filetype::Archive(archive);
+        }
+        if input.ends_with(".msi") {
+            // todo: add more on this
+            return Filetype::Installer;
+        }
+        Filetype::Binary
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum TargetOs {
+    Windows,
+    Linux,
+    Mac,
+    Freebsd,
+    Openbsd,
+    Netbsd,
+    Unknown,
+}
+
+impl TargetOs {
+    fn identify(input: &str) -> TargetOs {
+        let normed_input = input.to_lowercase();
+        let win = ["win", "windows"];
+        let linux = ["linux"];
+        let mac = ["mac", "macos", "macosx", "darwin"];
+        let freebsd = ["freebsd"];
+        let openbsd = ["openbsd"];
+        let netbsd = ["netbsd"];
+
+        // bsd's first since there really isn't a false positive here
+        if freebsd.iter().any(|x| normed_input.contains(x)) {
+            return TargetOs::Freebsd;
+        }
+        if openbsd.iter().any(|x| normed_input.contains(x)) {
+            return TargetOs::Openbsd;
+        }
+        if netbsd.iter().any(|x| normed_input.contains(x)) {
+            return TargetOs::Netbsd;
+        }
+        // note, mac must go before win since "win" is in "darwin"
+        if mac.iter().any(|x| normed_input.contains(x)) {
+            return TargetOs::Mac;
+        }
+        if win.iter().any(|x| normed_input.contains(x)) {
+            return TargetOs::Windows;
+        }
+        if linux.iter().any(|x| normed_input.contains(x)) {
+            return TargetOs::Linux;
+        }
+        TargetOs::Unknown
+    }
+}
+
+impl Display for TargetOs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TargetOs::Windows => write!(f, "windows"),
+            TargetOs::Linux => write!(f, "linux"),
+            TargetOs::Mac => write!(f, "mac"),
+            TargetOs::Freebsd => write!(f, "freebsd"),
+            TargetOs::Openbsd => write!(f, "openbsd"),
+            TargetOs::Netbsd => write!(f, "netbsd"),
+            TargetOs::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
+enum Endianness {
+    Big,
+    Little,
+}
+
+#[derive(PartialEq, Debug)]
+enum TargetArch {
+    Amd64,
+    Arm64,
+    Aarch64,
+    PPC(Endianness),
+    Arm32,
+    Mips(Endianness),
+    Mips64(Endianness),
+    RiscV,
+    x86,
+    Unknown,
+}
+
+impl Display for TargetArch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TargetArch::Amd64 => write!(f, "amd64"),
+            TargetArch::Arm64 => write!(f, "arm64"),
+            TargetArch::Aarch64 => write!(f, "aarch64"),
+            TargetArch::PPC(Endianness::Big) => write!(f, "ppc64"),
+            TargetArch::PPC(Endianness::Little) => write!(f, "ppc64le"),
+            TargetArch::Arm32 => write!(f, "arm"),
+            TargetArch::Mips(Endianness::Big) => write!(f, "mips"),
+            TargetArch::Mips(Endianness::Little) => write!(f, "mipsle"),
+            TargetArch::Mips64(Endianness::Big) => write!(f, "mips64"),
+            TargetArch::Mips64(Endianness::Little) => write!(f, "mips64le"),
+            TargetArch::RiscV => write!(f, "riscv"),
+            TargetArch::x86 => write!(f, "x86"),
+            TargetArch::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
+impl TargetArch {
+    fn identify(input: &str) -> TargetArch {
+        let amd = ["amd64", "x64", "x86_64"];
+        let x86 = ["x86", "i386", "i686", "x86_32", "386", "686", "ia32"];
+        let arm = ["arm64"];
+        let arm32 = ["arm"];
+        let aarch = ["aarch64"];
+        let ppcle = ["ppc64le", "ppcle"];
+        let ppc = ["ppc", "ppc64"];
+        let mips64le = ["mips64le"];
+        let mips64 = ["mips64"];
+        let mipsle = ["mipsle"];
+        let mips = ["mips"];
+        let riscv = ["riscv"];
+
+        // order of these gates is important due to the substrings
+
+        if amd.iter().any(|x| input.contains(x)) {
+            return TargetArch::Amd64;
+        }
+        if arm.iter().any(|x| input.contains(x)) {
+            return TargetArch::Arm64;
+        }
+        if aarch.iter().any(|x| input.contains(x)) {
+            return TargetArch::Aarch64;
+        }
+        if ppcle.iter().any(|x| input.contains(x)) {
+            return TargetArch::PPC(Endianness::Little);
+        }
+        if ppc.iter().any(|x| input.contains(x)) {
+            return TargetArch::PPC(Endianness::Big);
+        }
+        if mips64le.iter().any(|x| input.contains(x)) {
+            return TargetArch::Mips64(Endianness::Little);
+        }
+        if mips64.iter().any(|x| input.contains(x)) {
+            return TargetArch::Mips64(Endianness::Big);
+        }
+        if mipsle.iter().any(|x| input.contains(x)) {
+            return TargetArch::Mips(Endianness::Little);
+        }
+        if mips.iter().any(|x| input.contains(x)) {
+            return TargetArch::Mips(Endianness::Big);
+        }
+        if x86.iter().any(|x| input.contains(x)) {
+            return TargetArch::x86;
+        }
+        if arm32.iter().any(|x| input.contains(x)) {
+            return TargetArch::Arm32;
+        }
+        if riscv.iter().any(|x| input.contains(x)) {
+            return TargetArch::RiscV;
+        }
+
+        // ok, some that come from combining with the os name
+        let amd64_os = ["windows64", "win64", "winx64", "linux64"];
+        let x86_os = ["windows32", "win32", "winx86", "linux32"];
+        if amd64_os.iter().any(|x| input.contains(x)) {
+            return TargetArch::Amd64;
+        }
+        if x86_os.iter().any(|x| input.contains(x)) {
+            return TargetArch::x86;
+        }
+
+        TargetArch::Unknown
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub struct TargetDeployment {
+    os: TargetOs,
+    arch: TargetArch,
+}
+
+impl Display for TargetDeployment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.os, self.arch)
+    }
+}
+
+impl TargetDeployment {
+    fn is_unknown(&self) -> bool {
+        self.os == TargetOs::Unknown || self.arch == TargetArch::Unknown
+    }
+
+    fn identify(input: &str) -> TargetDeployment {
+        TargetDeployment {
+            os: TargetOs::identify(input),
+            arch: TargetArch::identify(input),
+        }
+    }
+}
+
+impl Default for TargetDeployment {
+    fn default() -> Self {
+        TargetDeployment {
+            os: TargetOs::Linux,
+            arch: TargetArch::Amd64,
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Target {
+    pub deployment: TargetDeployment,
+    pub filetype: Filetype,
+}
+
+impl Target {
+    pub(crate) fn identify(input: &str) -> Target {
+        Target {
+            deployment: TargetDeployment::identify(input),
+            filetype: Filetype::identify(input),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct ITC {
+        input: String,
+        expected: Target,
+    }
+
+    impl ITC {
+        fn new(input: &str, expected: Target) -> ITC {
+            ITC {
+                input: input.to_string(),
+                expected,
+            }
+        }
+    }
+
+    #[test]
+    fn test_assumptions() {}
+
+    #[test]
+    fn test_identify() {
+        let cases = vec![
+            ITC::new(
+                "yq_darwin_amd64",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Mac,
+                        arch: TargetArch::Amd64,
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_darwin_amd64.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Mac,
+                        arch: TargetArch::Amd64,
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_darwin_arm64",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Mac,
+                        arch: TargetArch::Arm64,
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_darwin_arm64.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Mac,
+                        arch: TargetArch::Arm64,
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_freebsd_386",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Freebsd,
+                        arch: TargetArch::x86,
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_freebsd_386.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Freebsd,
+                        arch: TargetArch::x86,
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_freebsd_amd64",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Freebsd,
+                        arch: TargetArch::Amd64,
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_freebsd_amd64.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Freebsd,
+                        arch: TargetArch::Amd64,
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_freebsd_arm",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Freebsd,
+                        arch: TargetArch::Arm32,
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_freebsd_arm.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Freebsd,
+                        arch: TargetArch::Arm32,
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_linux_386",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::x86,
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_linux_386.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::x86,
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_linux_amd64",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Amd64,
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_linux_amd64.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Amd64,
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_linux_arm",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Arm32,
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_linux_mips",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Mips(Endianness::Big),
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_linux_mips.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Mips(Endianness::Big),
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_linux_mips64",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Mips64(Endianness::Big),
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_linux_mips64.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Mips64(Endianness::Big),
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+            ITC::new(
+                "yq_linux_mips64le",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Mips64(Endianness::Little),
+                    },
+                    filetype: Filetype::Binary,
+                },
+            ),
+            ITC::new(
+                "yq_linux_mips64le.tar.gz",
+                Target {
+                    deployment: TargetDeployment {
+                        os: TargetOs::Linux,
+                        arch: TargetArch::Mips64(Endianness::Little),
+                    },
+                    filetype: Filetype::Archive(ArchiveType::TarGz),
+                },
+            ),
+        ];
+
+        for case in cases {
+            println!("{:?} -> {:?}", case.input, case.expected);
+            assert_eq!(Target::identify(&case.input), case.expected);
+        }
+    }
+}
