@@ -73,11 +73,11 @@ impl DownloadInfo {
     fn from_asset(asset: &octocrab::models::repos::Asset) -> Self {
         Self {
             name: asset.name.clone(),
-            label: asset.label.to_owned().unwrap().to_string(),
+            label: asset.label.to_owned().unwrap_or("".to_string()),
             url: asset.browser_download_url.clone(),
             content_type: asset.content_type.clone(),
             size: asset.size as u64,
-            target: app_downloader::Target::identify(&asset.name),
+            target: Target::identify(&asset.name),
         }
     }
 }
@@ -92,7 +92,7 @@ impl Display for DownloadInfo {
     }
 }
 
-pub async fn get_link(app: Repo, target: TargetDeployment, version: Option<&str>) -> Release {
+pub async fn get_link(app: &Repo, target: &TargetDeployment, version: Option<&str>) -> Release {
     let version: &str = version.unwrap_or("latest");
     let octocrab = octocrab::instance();
     let repo = app.get_github_repo();
@@ -114,13 +114,31 @@ pub async fn get_link(app: Repo, target: TargetDeployment, version: Option<&str>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use octocrab::models::repos::Release;
 
     #[tokio::test]
     async fn base_test() {
-        let release = get_link(Repo::Github("mikefarah/yq".to_string()), TargetDeployment::default(), None).await;
-        for asset in release.assets {
-            println!("{:}", DownloadInfo::from_asset(&asset));
+        let deployment = TargetDeployment::default();
+        for repo in [
+            Repo::github("adam-huganir/yutc"),
+            Repo::github("cli/cli"),
+            Repo::github("google/go-jsonnet"),
+            Repo::github("jqlang/jq"),
+            Repo::github("koalaman/shellcheck"),
+            Repo::github("mikefarah/yq"),
+            Repo::github("mvdan/sh"),
+        ] {
+            let release = get_link(&repo, &deployment, None).await;
+            let mut matched = vec![];
+            for asset in release.assets {
+                let info = DownloadInfo::from_asset(&asset);
+                if info.target.deployment == deployment {
+                    matched.push(info);
+                }
+            }
+            assert!(matched.len() > 0);
+            for info in matched {
+                println!("{}", info);
+            }
         }
     }
 }

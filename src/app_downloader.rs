@@ -1,5 +1,11 @@
 use std::fmt::Display;
 
+fn get_extensions(filename: &str) -> Vec<String> {
+    let parts: Vec<String> = filename.split('.').skip(1).map(|s| s.to_string()).collect();
+    // this is lazy, need to fix this later (the len 4 part)
+    parts.iter().filter(|x| !x.is_empty() && x.len() <= 4).cloned().collect()
+}
+
 #[derive(PartialEq, Debug)]
 pub enum ArchiveType {
     Tar,
@@ -8,7 +14,6 @@ pub enum ArchiveType {
     TarXz,
     _7z,
     Zip,
-    Unknown,
     Rar,
     Gzip,
 }
@@ -24,13 +29,12 @@ impl Display for ArchiveType {
             ArchiveType::Zip => write!(f, "zip"),
             ArchiveType::Rar => write!(f, "rar"),
             ArchiveType::Gzip => write!(f, "gz"),
-            ArchiveType::Unknown => write!(f, "unknown"),
         }
     }
 }
 
 impl ArchiveType {
-    fn identify(input: &str) -> ArchiveType {
+    fn identify(input: &str) -> Option<ArchiveType> {
         let tar = ["tar"];
         let tar_gz = ["tar.gz", "tgz"];
         let tar_bz2 = ["tar.bz2"];
@@ -41,38 +45,76 @@ impl ArchiveType {
         let zip = ["zip"];
 
         if tar.iter().any(|x| input.ends_with(x)) {
-            return ArchiveType::Tar;
+            return Some(ArchiveType::Tar);
         }
         if tar_gz.iter().any(|x| input.ends_with(x)) {
-            return ArchiveType::TarGz;
+            return Some(ArchiveType::TarGz);
         }
         if tar_bz2.iter().any(|x| input.ends_with(x)) {
-            return ArchiveType::TarBz2;
+            return Some(ArchiveType::TarBz2);
         }
         if tar_xz.iter().any(|x| input.ends_with(x)) {
-            return ArchiveType::TarXz;
+            return Some(ArchiveType::TarXz);
         }
         if z7z.iter().any(|x| input.ends_with(x)) {
-            return ArchiveType::_7z;
+            return Some(ArchiveType::_7z);
         }
         if zip.iter().any(|x| input.ends_with(x)) {
-            return ArchiveType::Zip;
+            return Some(ArchiveType::Zip);
         }
         if rar.iter().any(|x| input.ends_with(x)) {
-            return ArchiveType::Rar;
+            return Some(ArchiveType::Rar);
         }
         // should be last since it's sometimes a part of a compound
         if gz.iter().any(|x| input.ends_with(x)) {
-            return ArchiveType::Gzip;
+            return Some(ArchiveType::Gzip);
         }
-        ArchiveType::Unknown
+        None
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum InstallerType {
+    Msi,
+    Exe,
+    Deb,
+    Rpm,
+    Pkg,
+}
+
+impl InstallerType {
+    fn identify(input: &str) -> Option<InstallerType> {
+        let extensions = &get_extensions(input);
+        if extensions.is_empty() {
+            return None;
+        }
+        match extensions.last().unwrap().as_str() {
+            "msi" => Some(InstallerType::Msi),
+            "exe" => Some(InstallerType::Exe),
+            "deb" => Some(InstallerType::Deb),
+            "rpm" => Some(InstallerType::Rpm),
+            "pkg" => Some(InstallerType::Pkg),
+            _ => None,
+        }
+    }
+}
+
+impl Display for InstallerType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstallerType::Msi => write!(f, "msi"),
+            InstallerType::Exe => write!(f, "exe"),
+            InstallerType::Deb => write!(f, "deb"),
+            InstallerType::Rpm => write!(f, "rpm"),
+            InstallerType::Pkg => write!(f, "pkg"),
+        }
     }
 }
 
 #[derive(PartialEq, Debug)]
 pub enum Filetype {
     Binary,
-    Installer,
+    Installer(InstallerType),
     Archive(ArchiveType),
     Unknown,
 }
@@ -82,7 +124,7 @@ impl Display for Filetype {
         match self {
             Filetype::Binary => write!(f, "binary"),
             Filetype::Archive(x) => write!(f, "{}", x),
-            Filetype::Installer => write!(f, "installer"),
+            Filetype::Installer(x) => write!(f, "{:?} installer", x),
             Filetype::Unknown => write!(f, "unknown"),
         }
     }
@@ -91,14 +133,25 @@ impl Display for Filetype {
 impl Filetype {
     fn identify(input: &str) -> Filetype {
         let archive = ArchiveType::identify(input);
-        if archive != ArchiveType::Unknown {
-            return Filetype::Archive(archive);
+        if archive.is_some() {
+            return Filetype::Archive(archive.unwrap());
         }
-        if input.ends_with(".msi") {
-            // todo: add more on this
-            return Filetype::Installer;
+        let installer_type = InstallerType::identify(input);
+        if installer_type.is_some() {
+            return Filetype::Installer(installer_type.unwrap());
         }
-        Filetype::Binary
+
+        let extensions = get_extensions(input);
+        if extensions.is_empty() || {
+            match extensions.last().unwrap_or(&String::default()).as_str() {
+                "exe" => true,
+                _ => false,
+            }
+        } {
+            Filetype::Binary
+        } else {
+            Filetype::Unknown
+        }
     }
 }
 
