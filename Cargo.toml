@@ -21,3 +21,8 @@ liquid = "0.26.11"
 liquid-core = { version = "0.26.11", features = ["derive"] }
 shell-quote = { version = "0.7.2", default-features = false, features = ["bash", "sh"] }
 anyhow = "1.0.98"
+lenient_semver = "0.4.2"
+uaparser = "0.6.4"
+oapi = "0.1.2"
+rocket_okapi = { version = "0.9.0", features = ["rapidoc"] }
+schemars = "0.8.22"

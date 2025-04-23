@@ -1,44 +1,101 @@
+use std::fmt::Display;
 use rocket::http::hyper::header::CONTENT_DISPOSITION;
 use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
 use rocket::{http, response, Request, Response};
 use std::io::Cursor;
+use rocket::yansi::Paint;
+use rocket_okapi::gen::OpenApiGenerator;
+use rocket_okapi::JsonSchema;
+use rocket_okapi::okapi::openapi3::Responses;
+use rocket_okapi::response::OpenApiResponder;
+use crate::app_downloader::{TargetArch, TargetOs};
 
 pub(crate) trait QueryOptions {
     fn to_args(&self) -> String;
 }
 
-#[derive(Debug, PartialEq, FromForm)]
-pub struct InstallQueryOptions {
-    version: Option<String>,
-    prefix: Option<String>,
-    app: Option<String>,
+#[derive(Debug, PartialEq, FromFormField, JsonSchema)]
+pub enum InstallMethod {
+    Installer,
+    Binary,
 }
 
-impl QueryOptions for InstallQueryOptions {
-    fn to_args(&self) -> String {
-        let mut args_out: Vec<String> = vec![];
-        if let Some(v) = self.version.clone() {
-            args_out.push(format!("--version={}", v));
+impl Display for InstallMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstallMethod::Installer => write!(f, "{}", Paint::yellow("installer")),
+            InstallMethod::Binary => write!(f, "{}", Paint::yellow("binary")),
         }
-        if let Some(p) = self.prefix.clone() {
-            args_out.push(format!("--prefix={}", p));
-        }
-        args_out.push(self.app.clone().unwrap());
-        args_out.join(" ")
     }
+}
+
+impl From<&str> for InstallMethod {
+    fn from(value: &str) -> Self {
+        match value {
+            "installer" => InstallMethod::Installer,
+            _ => InstallMethod::Binary,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, FromForm, JsonSchema)]
+pub struct InstallQueryOptions {
+    app: Option<String>,
+    #[field(default = "latest")]
+    version: String,
+    #[field(default = "$HOME/.local")]
+    prefix: String,
+    #[field(default = "amd64")]
+    arch: TargetArch,
+    #[field(default = "linux")]
+    os: TargetOs,
+    #[field(default = "binary")]
+    method: InstallMethod,
+    #[field(default = false)]
+    download_only: bool,
+    #[field(default = false)]
+    force: bool,
+    #[field(default = false)]
+    quiet: bool,
+    #[field(default = "DEBUG")]
+    log_level: String
 }
 
 impl InstallQueryOptions {
     pub(crate) fn set_app(&mut self, app: String) {
         self.app = Some(app);
     }
+
+    pub fn template_globals(&self) -> liquid::Object {
+        liquid::object!({
+            "app": self.app.as_ref().unwrap(),
+            "version": self.version.as_str(),
+            "prefix": self.prefix.as_str(),
+            "arch": self.arch.to_string(),
+            "os": self.os.to_string(),
+            "method": self.method.to_string(),
+            "download_only": self.download_only,
+            "force": self.force,
+            "quiet": self.quiet,
+            "log_level": self.log_level.as_str(),
+            "file_url": format!("https://github.com/mikefarah/yq/releases/download/v4.30.2/yq_{}_{}", self.os, self.arch)
+        })
+    }
 }
 
-pub(crate) struct ScriptResponse {
+#[derive(JsonSchema)]
+pub struct ScriptResponse {
     filename: String,
+    #[schemars(skip)]
     body: Cursor<Vec<u8>>,
     body_size: usize,
+}
+
+impl QueryOptions for InstallQueryOptions {
+    fn to_args(&self) -> String {
+        "".to_ascii_lowercase()
+    }
 }
 
 impl ScriptResponse {
@@ -52,6 +109,12 @@ impl ScriptResponse {
             body,
             body_size,
         }
+    }
+}
+
+impl<'r> OpenApiResponder<'r, 'static> for ScriptResponse {
+    fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
+        Ok(Responses::default())
     }
 }
 

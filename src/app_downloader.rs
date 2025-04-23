@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use rocket_okapi::JsonSchema;
 
 fn get_extensions(filename: &str) -> Vec<String> {
     let parts: Vec<String> = filename.split('.').skip(1).map(|s| s.to_string()).collect();
@@ -155,7 +156,7 @@ impl Filetype {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, FromFormField,JsonSchema)]
 pub enum TargetOs {
     Windows,
     Linux,
@@ -164,6 +165,12 @@ pub enum TargetOs {
     Openbsd,
     Netbsd,
     Unknown,
+}
+
+impl From<&str> for TargetOs {
+    fn from(input: &str) -> Self {
+        TargetOs::identify(input)
+    }
 }
 
 impl TargetOs {
@@ -214,24 +221,29 @@ impl Display for TargetOs {
     }
 }
 
-#[derive(PartialEq, Debug)]
-enum Endianness {
-    Big,
-    Little,
-}
 
-#[derive(PartialEq, Debug)]
-enum TargetArch {
+#[derive(PartialEq, Debug, FromFormField,JsonSchema)]
+pub(crate) enum TargetArch {
     Amd64,
     Arm64,
     Aarch64,
-    PPC(Endianness),
+    PPCLe,
+    PPC,
     Arm32,
-    Mips(Endianness),
-    Mips64(Endianness),
+    MipsLe,
+    Mips,
+    Mips64Le,
+    Mips64,
     RiscV,
+    #[allow(non_camel_case_types)]
     x86,
     Unknown,
+}
+
+impl From<&str> for TargetArch {
+    fn from(value: &str) -> Self {
+        TargetArch::identify(value)
+    }
 }
 
 impl Display for TargetArch {
@@ -240,13 +252,13 @@ impl Display for TargetArch {
             TargetArch::Amd64 => write!(f, "amd64"),
             TargetArch::Arm64 => write!(f, "arm64"),
             TargetArch::Aarch64 => write!(f, "aarch64"),
-            TargetArch::PPC(Endianness::Big) => write!(f, "ppc64"),
-            TargetArch::PPC(Endianness::Little) => write!(f, "ppc64le"),
+            TargetArch::PPC => write!(f, "ppc64"),
+            TargetArch::PPCLe => write!(f, "ppc64le"),
             TargetArch::Arm32 => write!(f, "arm"),
-            TargetArch::Mips(Endianness::Big) => write!(f, "mips"),
-            TargetArch::Mips(Endianness::Little) => write!(f, "mipsle"),
-            TargetArch::Mips64(Endianness::Big) => write!(f, "mips64"),
-            TargetArch::Mips64(Endianness::Little) => write!(f, "mips64le"),
+            TargetArch::Mips => write!(f, "mips"),
+            TargetArch::MipsLe => write!(f, "mipsle"),
+            TargetArch::Mips64 => write!(f, "mips64"),
+            TargetArch::Mips64Le => write!(f, "mips64le"),
             TargetArch::RiscV => write!(f, "riscv"),
             TargetArch::x86 => write!(f, "x86"),
             TargetArch::Unknown => write!(f, "unknown"),
@@ -281,22 +293,22 @@ impl TargetArch {
             return TargetArch::Aarch64;
         }
         if ppcle.iter().any(|x| input.contains(x)) {
-            return TargetArch::PPC(Endianness::Little);
+            return TargetArch::PPCLe;
         }
         if ppc.iter().any(|x| input.contains(x)) {
-            return TargetArch::PPC(Endianness::Big);
+            return TargetArch::PPC;
         }
         if mips64le.iter().any(|x| input.contains(x)) {
-            return TargetArch::Mips64(Endianness::Little);
+            return TargetArch::Mips64Le;
         }
         if mips64.iter().any(|x| input.contains(x)) {
-            return TargetArch::Mips64(Endianness::Big);
+            return TargetArch::Mips64;
         }
         if mipsle.iter().any(|x| input.contains(x)) {
-            return TargetArch::Mips(Endianness::Little);
+            return TargetArch::MipsLe;
         }
         if mips.iter().any(|x| input.contains(x)) {
-            return TargetArch::Mips(Endianness::Big);
+            return TargetArch::Mips;
         }
         if x86.iter().any(|x| input.contains(x)) {
             return TargetArch::x86;
@@ -550,7 +562,7 @@ mod tests {
                 Target {
                     deployment: TargetDeployment {
                         os: TargetOs::Linux,
-                        arch: TargetArch::Mips(Endianness::Big),
+                        arch: TargetArch::Mips,
                     },
                     filetype: Filetype::Binary,
                 },
@@ -560,7 +572,7 @@ mod tests {
                 Target {
                     deployment: TargetDeployment {
                         os: TargetOs::Linux,
-                        arch: TargetArch::Mips(Endianness::Big),
+                        arch: TargetArch::Mips,
                     },
                     filetype: Filetype::Archive(ArchiveType::TarGz),
                 },
@@ -570,7 +582,7 @@ mod tests {
                 Target {
                     deployment: TargetDeployment {
                         os: TargetOs::Linux,
-                        arch: TargetArch::Mips64(Endianness::Big),
+                        arch: TargetArch::Mips64,
                     },
                     filetype: Filetype::Binary,
                 },
@@ -580,7 +592,7 @@ mod tests {
                 Target {
                     deployment: TargetDeployment {
                         os: TargetOs::Linux,
-                        arch: TargetArch::Mips64(Endianness::Big),
+                        arch: TargetArch::Mips64,
                     },
                     filetype: Filetype::Archive(ArchiveType::TarGz),
                 },
@@ -590,7 +602,7 @@ mod tests {
                 Target {
                     deployment: TargetDeployment {
                         os: TargetOs::Linux,
-                        arch: TargetArch::Mips64(Endianness::Little),
+                        arch: TargetArch::Mips64Le,
                     },
                     filetype: Filetype::Binary,
                 },
@@ -600,7 +612,7 @@ mod tests {
                 Target {
                     deployment: TargetDeployment {
                         os: TargetOs::Linux,
-                        arch: TargetArch::Mips64(Endianness::Little),
+                        arch: TargetArch::Mips64Le,
                     },
                     filetype: Filetype::Archive(ArchiveType::TarGz),
                 },

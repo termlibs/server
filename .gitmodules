@@ -7,3 +7,6 @@
 [submodule "termlibs/build.sh"]
 	path = termlibs/build.sh
 	url = https://github.com/termlibs/build.sh
+[submodule "lib/uap-core"]
+	path = lib/uap-core
+	url = https://github.com/ua-parser/uap-core.git

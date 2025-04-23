@@ -2,17 +2,18 @@
 
 set -euo pipefail
 
-_QUIET=${QUIET:-false} #{{ quiet | escape_shell }}
-_COMMAND_NAME="yutc" #{{ command_name | escape_shell }}
-_FILE_URL=https://google.com #{{ file_url | escape_shell }}
+_QUIET={{ quiet | escape_shell }}
+_FORCE={{ force | escape_shell }}
+_COMMAND_NAME={{ app | escape_shell }}
+_FILE_URL={{ file_url | escape_shell }}
 
 
 _E_GENERIC_ERROR=10
 _TMPDIR="$(mktemp -d)"
 cd "$_TMPDIR"
-trap "[ -d \"$_TMPDIR\" ] && rm -rf \"$_TMPDIR\"" EXIT
+trap "[ -d \"$_TMPDIR\" ] &&  _log DEBUG \"Removing $_TMPDIR\" && rm -rf \"$_TMPDIR\"" EXIT
 
-INSTALL_LOG_LEVEL=DEBUG #{{ install_log_level | escape_shell }}
+INSTALL_LOG_LEVEL={{ log_level | escape_shell }}
 case "$INSTALL_LOG_LEVEL" in
     TRACE)
       INSTALL_LOG_LEVEL=0
@@ -80,7 +81,7 @@ _ask () {
       case "$1" in
         -d | --default)
           DEFAULT="$2"
-          _log DEBUG "Using custom default, $DEFAULT"
+          _log TRACE "Using custom default, $DEFAULT"
           shift 2
           ;;
         --)
@@ -98,9 +99,9 @@ _ask () {
 
 _ask_yn () {
     [ "$_QUIET" = true ] && return
-    _log DEBUG "Asking: $@"
+    echo "Asking: ${@}"
     local answer
-    answer="$(_ask "$@")"
+    answer="$(_ask "${@}")"
     case "$answer" in
       Y | y | yes)
         return 0
@@ -125,6 +126,7 @@ _urlget() {
   fi
 }
 
-_ask_yn -d n "Download $_FILE_URL?" || exit 2
+_ask_yn -d n "Download $_FILE_URL to ${_TMPDIR}/${_COMMAND_NAME}?"
+exit 1
 _urlget "$_FILE_URL" > "$_TMPDIR/${_COMMAND_NAME}"
 ls -lh

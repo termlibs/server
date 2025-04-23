@@ -2,18 +2,23 @@ extern crate core;
 #[macro_use]
 extern crate rocket;
 
-mod shell_files;
-mod static_site;
-mod types;
 mod app_downloader;
 mod gh;
+mod shell_files;
+mod static_site;
 mod templates;
+mod types;
 
+use crate::templates::template_install_script;
 use crate::types::ScriptResponse;
 use log::info;
 use rocket::http::ContentType;
 use rocket::response::content;
 use rocket::Request;
+use rocket_okapi::okapi::schemars;
+use rocket_okapi::okapi::schemars::JsonSchema;
+use rocket_okapi::settings::UrlObject;
+use rocket_okapi::{openapi, openapi_get_routes, rapidoc::*};
 use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -53,30 +58,40 @@ fn not_found(_req: &Request) -> content::RawHtml<String> {
     content::RawHtml(html)
 }
 
+#[openapi(skip)]
 #[get("/favicon.ico")]
 async fn favicon<'r>() -> (ContentType, Vec<u8>) {
     (ContentType::Icon, FAVICON.to_vec())
 }
 
-#[get("/install", rank = 2)]
-async fn install_handler_root() -> ScriptResponse {
-    info!("install_handler_root()");
-    let args: Option<InstallQueryOptions> = None;
-    let output = shell_files::create_install_script(args).await.unwrap();
-    ScriptResponse::new("install.sh".to_string(), output)
-}
+// #[openapi()]
+// #[get("/install?<q..>", rank = 2)]
+// async fn install_handler_root(q: (String, String)) -> ScriptResponse {
+//     info!("install_handler_root()");
+//     info!("{:#?}", q);
+//
+//     // let args: Option<InstallQueryOptions> = None;
+//     // let output = shell_files::create_install_script(args).await.unwrap();
+//     // ScriptResponse::new("install.sh".to_string(), output)
+//     ScriptResponse::new("install.sh".to_string(), "".to_string())
+// }
 
+#[openapi()]
 #[get("/install/<app>?<q..>", rank = 1)]
 async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptResponse {
     info!("install_handler({:?}, {:?})", app, q);
     q.set_app(app.to_owned());
-    let output = shell_files::create_install_script(Some(q)).await.unwrap();
-    ScriptResponse::new(format!("install-{}.sh", app), output)
+    match template_install_script(q).await {
+        Ok(script) => ScriptResponse::new(format!("install-{}.sh", app), script),
+        Err(err) => panic!("error creating install script: {}", err),
+    }
 }
 
+#[openapi()]
 #[get("/", rank = 10)]
 async fn root_handler() -> content::RawHtml<String> {
     info!("{:?}", "root");
+    info!("{:?}", TERMLIBS_ROOT);
     let html = static_site::load_static("index.html").unwrap_or("".to_string());
     content::RawHtml(html)
 }
@@ -102,6 +117,21 @@ async fn rocket() -> _ {
         .register("/", catchers![not_found])
         .mount(
             "/",
-            routes![favicon, install_handler, install_handler_root, root_handler],
+            openapi_get_routes![favicon, install_handler, root_handler],
+        )
+        .mount(
+            "/rapidoc/",
+            make_rapidoc(&RapiDocConfig {
+                general: GeneralConfig {
+                    spec_urls: vec![UrlObject::new("General", "../openapi.json")],
+                    ..Default::default()
+                },
+                hide_show: HideShowConfig {
+                    allow_spec_url_load: false,
+                    allow_spec_file_load: false,
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
         )
 }
