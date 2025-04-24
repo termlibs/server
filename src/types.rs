@@ -1,21 +1,22 @@
-use std::fmt::Display;
+use crate::app_downloader::{TargetArch, TargetOs};
 use rocket::http::hyper::header::CONTENT_DISPOSITION;
 use rocket::http::{ContentType, Status};
 use rocket::response::Responder;
-use rocket::{http, response, Request, Response};
-use std::io::Cursor;
 use rocket::yansi::Paint;
+use rocket::{http, response, Request, Response};
 use rocket_okapi::gen::OpenApiGenerator;
-use rocket_okapi::JsonSchema;
 use rocket_okapi::okapi::openapi3::Responses;
 use rocket_okapi::response::OpenApiResponder;
-use crate::app_downloader::{TargetArch, TargetOs};
+use rocket_okapi::JsonSchema;
+use std::fmt::Display;
+use std::io;
+use std::io::Cursor;
 
 pub(crate) trait QueryOptions {
     fn to_args(&self) -> String;
 }
 
-#[derive(Debug, PartialEq, FromFormField, JsonSchema)]
+#[derive(Debug, PartialEq, Clone, FromFormField, JsonSchema)]
 pub enum InstallMethod {
     Installer,
     Binary,
@@ -39,17 +40,17 @@ impl From<&str> for InstallMethod {
     }
 }
 
-#[derive(Debug, PartialEq, FromForm, JsonSchema)]
+#[derive(Debug, PartialEq, Clone, FromForm, JsonSchema)]
 pub struct InstallQueryOptions {
     app: Option<String>,
     #[field(default = "latest")]
-    version: String,
+    pub(crate) version: String,
     #[field(default = "$HOME/.local")]
     prefix: String,
     #[field(default = "amd64")]
-    arch: TargetArch,
+    pub(crate) arch: TargetArch,
     #[field(default = "linux")]
-    os: TargetOs,
+    pub(crate) os: TargetOs,
     #[field(default = "binary")]
     method: InstallMethod,
     #[field(default = false)]
@@ -84,6 +85,34 @@ impl InstallQueryOptions {
     }
 }
 
+#[derive(JsonSchema)]
+pub struct StringList {
+    links: Vec<String>,
+}
+
+impl StringList {
+    pub fn new(links: Vec<String>) -> StringList {
+        StringList { links }
+    }
+}
+
+impl<'r> OpenApiResponder<'r, 'static> for StringList {
+    fn responses(gen: &mut OpenApiGenerator) -> rocket_okapi::Result<Responses> {
+        Ok(Responses::default())
+    }
+}
+
+impl<'r> Responder<'r, 'static> for StringList {
+    fn respond_to(self, _req: &Request) -> response::Result<'static> {
+        let content_type = ContentType::new("application", "json");
+        let data = serde_json::to_string(self.links.as_slice()).unwrap();
+        Response::build()
+            .status(Status::Ok)
+            .header(content_type)
+            .sized_body(data.len(), Cursor::new(data))
+            .ok()
+    }
+}
 #[derive(JsonSchema)]
 pub struct ScriptResponse {
     filename: String,

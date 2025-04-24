@@ -6,22 +6,27 @@ mod app_downloader;
 mod gh;
 mod shell_files;
 mod static_site;
+mod supported_apps;
 mod templates;
 mod types;
 
+use crate::app_downloader::{Target, TargetDeployment, TargetOs};
+use crate::gh::get_github_download_links;
 use crate::templates::template_install_script;
-use crate::types::ScriptResponse;
+use crate::types::{ScriptResponse, StringList};
 use log::info;
 use rocket::http::ContentType;
-use rocket::response::content;
-use rocket::Request;
+use rocket::response::{content, status};
+use rocket::serde::json::json;
+use rocket::yansi::Paint;
+use rocket::{Request, Response};
 use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::{openapi, openapi_get_routes, rapidoc::*};
-use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use std::{env, io};
 use types::InstallQueryOptions;
 
 const FAVICON: &[u8] = include_bytes!("../favicon.ico");
@@ -64,27 +69,37 @@ async fn favicon<'r>() -> (ContentType, Vec<u8>) {
     (ContentType::Icon, FAVICON.to_vec())
 }
 
-// #[openapi()]
-// #[get("/install?<q..>", rank = 2)]
-// async fn install_handler_root(q: (String, String)) -> ScriptResponse {
-//     info!("install_handler_root()");
-//     info!("{:#?}", q);
-//
-//     // let args: Option<InstallQueryOptions> = None;
-//     // let output = shell_files::create_install_script(args).await.unwrap();
-//     // ScriptResponse::new("install.sh".to_string(), output)
-//     ScriptResponse::new("install.sh".to_string(), "".to_string())
-// }
-
 #[openapi()]
 #[get("/install/<app>?<q..>", rank = 1)]
 async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptResponse {
     info!("install_handler({:?}, {:?})", app, q);
     q.set_app(app.to_owned());
-    match template_install_script(q).await {
-        Ok(script) => ScriptResponse::new(format!("install-{}.sh", app), script),
-        Err(err) => panic!("error creating install script: {}", err),
-    }
+
+    let supported_app = supported_apps::get_app(app).unwrap();
+    let arch = q.arch.clone();
+    let os = q.os.clone();
+    let version = q.version.clone();
+    let target_deployment = TargetDeployment::new(os, arch);
+    let links = get_github_download_links(&supported_app.repo, &target_deployment, &version).await;
+
+    let mut response = Response::new();
+    let mut globals = q.template_globals();
+    response.set_header(ContentType::new("application", "json"));
+
+    let links_strings: Vec<String> = links.iter().map(|link| link.url.to_string()).collect();
+
+    let l: liquid_core::model::Array = links
+            .iter()
+            .map(|link| liquid_core::Value::scalar(link.url.to_string()))
+            .collect();
+    // insert the links into the liquid globals:
+    globals.insert(
+        "links".into(),
+        liquid_core::Value::Array(l),
+    );
+    let script = template_install_script(&globals).await;
+
+    ScriptResponse::new(format!("install-{}.sh", app), script.unwrap(), )
 }
 
 #[openapi()]

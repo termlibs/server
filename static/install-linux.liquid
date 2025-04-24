@@ -126,7 +126,9 @@ _urlget() {
   fi
 }
 
-_ask_yn -d n "Download $_FILE_URL to ${_TMPDIR}/${_COMMAND_NAME}?"
+{% for link in links %}
+_ask_yn -d n "Download {{ link | escape_shell }} to ${_TMPDIR}/${_COMMAND_NAME}?"
+{% endfor %}
 exit 1
 _urlget "$_FILE_URL" > "$_TMPDIR/${_COMMAND_NAME}"
 ls -lh

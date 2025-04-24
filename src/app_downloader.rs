@@ -1,10 +1,14 @@
-use std::fmt::Display;
 use rocket_okapi::JsonSchema;
+use std::fmt::Display;
 
 fn get_extensions(filename: &str) -> Vec<String> {
     let parts: Vec<String> = filename.split('.').skip(1).map(|s| s.to_string()).collect();
     // this is lazy, need to fix this later (the len 4 part)
-    parts.iter().filter(|x| !x.is_empty() && x.len() <= 4).cloned().collect()
+    parts
+        .iter()
+        .filter(|x| !x.is_empty() && x.len() <= 4)
+        .cloned()
+        .collect()
 }
 
 #[derive(PartialEq, Debug)]
@@ -156,7 +160,7 @@ impl Filetype {
     }
 }
 
-#[derive(PartialEq, Debug, FromFormField,JsonSchema)]
+#[derive(PartialEq, Debug, Clone, FromFormField, JsonSchema)]
 pub enum TargetOs {
     Windows,
     Linux,
@@ -174,7 +178,7 @@ impl From<&str> for TargetOs {
 }
 
 impl TargetOs {
-    fn identify(input: &str) -> TargetOs {
+    pub(crate) fn identify(input: &str) -> TargetOs {
         let normed_input = input.to_lowercase();
         let win = ["win", "windows"];
         let linux = ["linux"];
@@ -221,8 +225,7 @@ impl Display for TargetOs {
     }
 }
 
-
-#[derive(PartialEq, Debug, FromFormField,JsonSchema)]
+#[derive(PartialEq, Debug, Clone, FromFormField, JsonSchema)]
 pub(crate) enum TargetArch {
     Amd64,
     Arm64,
@@ -351,6 +354,9 @@ impl TargetDeployment {
         self.os == TargetOs::Unknown || self.arch == TargetArch::Unknown
     }
 
+    pub fn new(os: TargetOs, arch: TargetArch) -> TargetDeployment {
+        TargetDeployment { os, arch }
+    }
     fn identify(input: &str) -> TargetDeployment {
         TargetDeployment {
             os: TargetOs::identify(input),
@@ -366,6 +372,7 @@ impl Default for TargetDeployment {
             arch: TargetArch::Amd64,
         }
     }
+    
 }
 
 #[derive(PartialEq, Debug)]
@@ -379,6 +386,13 @@ impl Target {
         Target {
             deployment: TargetDeployment::identify(input),
             filetype: Filetype::identify(input),
+        }
+    }
+
+    pub fn new(os: TargetOs, arch: TargetArch, filetype: Filetype) -> Target {
+        Target {
+            deployment: TargetDeployment { os, arch },
+            filetype,
         }
     }
 }
