@@ -62,8 +62,6 @@ pub struct InstallQueryOptions {
     quiet: bool,
     #[field(default = "DEBUG")]
     log_level: String,
-    #[field(default = None)]
-    repo: Option<String>
 }
 
 impl InstallQueryOptions {
@@ -72,8 +70,9 @@ impl InstallQueryOptions {
     }
 
     pub fn template_globals(&self) -> liquid::Object {
+        
         liquid::object!({
-            "app": self.app.as_ref().unwrap(),
+            "app": self.app.clone(),
             "version": self.version.as_str(),
             "prefix": self.prefix.as_str(),
             "arch": self.arch.to_string(),

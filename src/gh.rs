@@ -9,11 +9,12 @@ pub async fn get_github_download_links(
     version: &str,
 ) -> Vec<DownloadInfo> {
     let octocrab = octocrab::instance();
-    let repo = repo.get_github_repo();
-    let (owner, repo) = repo.split_once('/').unwrap();
+    let repo_string = repo.get_github_repo();
+    let (owner, repo) = repo_string.split_once('/').unwrap();
     let repo = octocrab.repos(owner, repo);
     let releases = repo.releases();
     let release: Release;
+    print!("checking for release {} from {:?}\n", version, repo_string);
     match version {
         "latest" => {
             release = releases.get_latest().await.unwrap();

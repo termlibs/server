@@ -79,7 +79,7 @@ async fn install_arbitrary_github_handler(
 ) -> StringList {
     let unsupported_app = SupportedApp::new(
         "unsupported",
-        Repo::github(&format!("https://github.com/{}/{}", user, repo)),
+        Repo::github(&format!("{}/{}", user, repo)),
         "github",
     );
     let links = load_app(&mut q, &unsupported_app).await;
