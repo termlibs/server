@@ -126,6 +126,7 @@ _urlget() {
   fi
 }
 
+{& if links}
 {% for link in links %}
 _ask_yn -d n "Download {{ link | escape_shell }} to ${_TMPDIR}/${_COMMAND_NAME}?"
 {% endfor %}

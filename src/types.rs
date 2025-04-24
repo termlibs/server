@@ -11,6 +11,7 @@ use rocket_okapi::JsonSchema;
 use std::fmt::Display;
 use std::io;
 use std::io::Cursor;
+use crate::supported_apps::Repo;
 
 pub(crate) trait QueryOptions {
     fn to_args(&self) -> String;
@@ -60,7 +61,9 @@ pub struct InstallQueryOptions {
     #[field(default = false)]
     quiet: bool,
     #[field(default = "DEBUG")]
-    log_level: String
+    log_level: String,
+    #[field(default = None)]
+    repo: Option<String>
 }
 
 impl InstallQueryOptions {
@@ -80,7 +83,6 @@ impl InstallQueryOptions {
             "force": self.force,
             "quiet": self.quiet,
             "log_level": self.log_level.as_str(),
-            "file_url": format!("https://github.com/mikefarah/yq/releases/download/v4.30.2/yq_{}_{}", self.os, self.arch)
         })
     }
 }

@@ -23,9 +23,16 @@ pub async fn get_github_download_links(
         }
     }
     let mut matched = vec![];
+    let skippable_extensions = [
+        ".asc", ".md5", ".sha1", ".sha256", ".sha512", ".sig", ".txt",
+    ];
     for asset in release.assets {
         let download_info = DownloadInfo::from_asset(&asset);
-        if &download_info.target.deployment == target_deployment {
+        if &download_info.target.deployment == target_deployment
+            && !skippable_extensions
+                .iter()
+                .any(|ext| download_info.name.ends_with(ext)) // TODO: fixme
+        {
             matched.push(download_info);
         }
     }

@@ -12,6 +12,7 @@ mod types;
 
 use crate::app_downloader::{Target, TargetDeployment, TargetOs};
 use crate::gh::get_github_download_links;
+use crate::supported_apps::{Repo, SupportedApp};
 use crate::templates::template_install_script;
 use crate::types::{ScriptResponse, StringList};
 use log::info;
@@ -70,12 +71,46 @@ async fn favicon<'r>() -> (ContentType, Vec<u8>) {
 }
 
 #[openapi()]
+#[get("/install/<user>/<repo>?<q..>", rank = 1)]
+async fn install_arbitrary_github_handler(
+    user: &str,
+    repo: &str,
+    mut q: InstallQueryOptions,
+) -> StringList {
+    let unsupported_app = SupportedApp::new(
+        "unsupported",
+        Repo::github(&format!("https://github.com/{}/{}", user, repo)),
+        "github",
+    );
+    let links = load_app(&mut q, &unsupported_app).await;
+    StringList::new(links)
+}
+
+#[openapi()]
 #[get("/install/<app>?<q..>", rank = 1)]
-async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptResponse {
+async fn install_handler(app: &str, mut q: InstallQueryOptions) -> StringList {
     info!("install_handler({:?}, {:?})", app, q);
     q.set_app(app.to_owned());
 
     let supported_app = supported_apps::get_app(app).unwrap();
+
+    let links = load_app(&mut q, &supported_app).await;
+    StringList::new(links)
+    // let l: liquid_core::model::Array = links
+    //         .iter()
+    //         .map(|link| liquid_core::Value::scalar(link.url.to_string()))
+    //         .collect();
+    // // insert the links into the liquid globals:
+    // globals.insert(
+    //     "links".into(),
+    //     liquid_core::Value::Array(l),
+    // );
+    // let script = template_install_script(&globals).await;
+    //
+    // ScriptResponse::new(format!("install-{}.sh", app), script.unwrap(), )
+}
+
+async fn load_app(q: &mut InstallQueryOptions, supported_app: &SupportedApp) -> Vec<String> {
     let arch = q.arch.clone();
     let os = q.os.clone();
     let version = q.version.clone();
@@ -87,19 +122,7 @@ async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptRespons
     response.set_header(ContentType::new("application", "json"));
 
     let links_strings: Vec<String> = links.iter().map(|link| link.url.to_string()).collect();
-
-    let l: liquid_core::model::Array = links
-            .iter()
-            .map(|link| liquid_core::Value::scalar(link.url.to_string()))
-            .collect();
-    // insert the links into the liquid globals:
-    globals.insert(
-        "links".into(),
-        liquid_core::Value::Array(l),
-    );
-    let script = template_install_script(&globals).await;
-
-    ScriptResponse::new(format!("install-{}.sh", app), script.unwrap(), )
+    links_strings
 }
 
 #[openapi()]
@@ -132,7 +155,12 @@ async fn rocket() -> _ {
         .register("/", catchers![not_found])
         .mount(
             "/",
-            openapi_get_routes![favicon, install_handler, root_handler],
+            openapi_get_routes![
+                favicon,
+                install_handler,
+                root_handler,
+                install_arbitrary_github_handler
+            ],
         )
         .mount(
             "/rapidoc/",

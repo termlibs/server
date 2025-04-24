@@ -49,7 +49,7 @@ pub static SUPPORTED_APPS: LazyLock<HashMap<&str, SupportedApp>> = LazyLock::new
     map
 });
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialOrd, PartialEq)]
 pub enum Repo {
     Github(String),
     Url(String),

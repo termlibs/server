@@ -1,11 +1,10 @@
+use liquid_core::{
+    Display_filter, Filter, FilterParameters, FilterReflection
+    , ParseFilter, Runtime, Value, ValueView,
+};
+use shell_quote::{Bash, Quote};
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use liquid_core::{
-    object, Display_filter, Expression, Filter, FilterParameters, FilterReflection,
-    FromFilterParameters, ParseFilter, Runtime, Value, ValueView,
-};
-use shell_quote::{Bash, Quote, Sh};
-use crate::types::InstallQueryOptions;
 
 const TEMPLATE: &str = include_str!("../static/install-linux.liquid");
 const TEMPLATE_PATH: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from("./static/install-linux.liquid"));
@@ -14,8 +13,11 @@ pub async fn template_install_script(options: &liquid::Object) -> anyhow::Result
     let parser = liquid::ParserBuilder::with_stdlib()
         .filter(ShellEscape)
         .build()?;
-    let template_string = tokio::fs::read(TEMPLATE_PATH.as_path()).await?;
-    let template_string = String::from_utf8(template_string)?;
+    let mut template_string = TEMPLATE.to_string(); 
+    if TEMPLATE_PATH.as_path().exists() {
+         let t = tokio::fs::read(TEMPLATE_PATH.as_path()).await?;
+         template_string = String::from_utf8(t)?;
+    }
     let template = parser.parse(&template_string)?;
     template.render(options).map_err(anyhow::Error::from)
 }
