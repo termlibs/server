@@ -13,7 +13,7 @@ mod types;
 use crate::app_downloader::{Target, TargetDeployment, TargetOs};
 use crate::gh::get_github_download_links;
 use crate::supported_apps::{Repo, SupportedApp};
-use crate::templates::template_install_script;
+use crate::templates::TEMPLATES;
 use crate::types::{ScriptResponse, StringList};
 use log::info;
 use rocket::http::ContentType;
@@ -28,11 +28,14 @@ use rocket_okapi::{openapi, openapi_get_routes, rapidoc::*};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::{env, io};
+use tera::{Context, Tera};
 use types::InstallQueryOptions;
 
 const FAVICON: &[u8] = include_bytes!("../favicon.ico");
 static TERMLIBS_ROOT: LazyLock<PathBuf> =
     LazyLock::new(|| PathBuf::from(env::var("TERMLIBS_ROOT").unwrap_or("../".into())));
+
+
 
 fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
     let log_level = log_level.to_uppercase();
@@ -55,6 +58,7 @@ fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
         .level(level)
         .chain(std::io::stdout())
         .apply()?;
+    warn!("Logging initialized at level {}", log_level);
     Ok(())
 }
 
@@ -77,52 +81,58 @@ async fn install_arbitrary_github_handler(
     repo: &str,
     mut q: InstallQueryOptions,
 ) -> StringList {
+    debug!("install_arbitrary_github_handler({:?}, {:?}) with {:#?}", user, repo, q);
     let unsupported_app = SupportedApp::new(
         "unsupported",
         Repo::github(&format!("{}/{}", user, repo)),
         "github",
     );
     let links = load_app(&mut q, &unsupported_app).await;
-    StringList::new(links)
+    StringList::new(links.unwrap())
+    // match links {
+    //     Ok(links) => StringList::new(links),
+    //     Err(e) => status::NotFound(format!("Not Found {:?}", e)),
+    // }
 }
 
 #[openapi()]
 #[get("/install/<app>?<q..>", rank = 1)]
-async fn install_handler(app: &str, mut q: InstallQueryOptions) -> StringList {
-    info!("install_handler({:?}, {:?})", app, q);
+async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptResponse {
+    debug!("install_handler({:?}, {:?})", app, q);
     q.set_app(app.to_owned());
 
     let supported_app = supported_apps::get_app(app).unwrap();
 
-    let links = load_app(&mut q, &supported_app).await;
-    StringList::new(links)
-    // let l: liquid_core::model::Array = links
-    //         .iter()
-    //         .map(|link| liquid_core::Value::scalar(link.url.to_string()))
-    //         .collect();
-    // // insert the links into the liquid globals:
-    // globals.insert(
-    //     "links".into(),
-    //     liquid_core::Value::Array(l),
-    // );
-    // let script = template_install_script(&globals).await;
-    //
-    // ScriptResponse::new(format!("install-{}.sh", app), script.unwrap(), )
+    let links = load_app(&mut q, &supported_app).await.unwrap();
+    let tera_context = Context::from_value(
+        json!({
+            "links": links,
+            "app": app,
+            "force": false,
+            "quiet": false,
+            "file_url": "something"
+        })
+    ).unwrap();
+    let script = TEMPLATES.render("install.sh", &tera_context);
+    // StringList::new(links.unwrap())
+
+    ScriptResponse::new(format!("install-{}.sh", app), script.unwrap())
 }
 
-async fn load_app(q: &mut InstallQueryOptions, supported_app: &SupportedApp) -> Vec<String> {
+async fn load_app(q: &mut InstallQueryOptions, supported_app: &SupportedApp) -> anyhow::Result<Vec<String>> {
     let arch = q.arch.clone();
     let os = q.os.clone();
     let version = q.version.clone();
     let target_deployment = TargetDeployment::new(os, arch);
+    debug!("target_deployment loaded: {:#?}", target_deployment);
     let links = get_github_download_links(&supported_app.repo, &target_deployment, &version).await;
 
     let mut response = Response::new();
     let mut globals = q.template_globals();
     response.set_header(ContentType::new("application", "json"));
 
-    let links_strings: Vec<String> = links.iter().map(|link| link.url.to_string()).collect();
-    links_strings
+    let links_strings: Vec<String> = links?.iter().map(|link| link.url.to_string()).collect();
+    Ok(links_strings)
 }
 
 #[openapi()]

@@ -3,6 +3,7 @@ use crate::gh::{get_github_download_links};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::LazyLock;
+use mime::Mime;
 use url::Url;
 
 const GITHUB_API: &str = "https://api.github.com";
@@ -84,7 +85,7 @@ impl Repo {
 
     pub async fn  get_download_link(&self, version: &str, target_deployment: &TargetDeployment) -> Vec<DownloadInfo> {
         match self {
-            Repo::Github(_) => get_github_download_links(&self, target_deployment, version).await,
+            Repo::Github(_) => get_github_download_links(&self, target_deployment, version).await.unwrap(),
             Repo::Url(url) => panic!("{} is not a github repo", url),
             Repo::Python(url) => panic!("{} is not a github repo", url),
         }
@@ -97,20 +98,25 @@ pub struct DownloadInfo {
     pub name: String,
     pub label: String,
     pub url: Url,
-    pub content_type: String,
+    pub content_type: Mime,
     pub size: u64,
     pub(crate) target: Target,
 }
 
 impl DownloadInfo {
     pub(crate) fn from_asset(asset: &octocrab::models::repos::Asset) -> Self {
+        let mime = asset.content_type.parse::<Mime>().unwrap();
         Self {
             name: asset.name.clone(),
             label: asset.label.to_owned().unwrap_or("".to_string()),
             url: asset.browser_download_url.clone(),
-            content_type: asset.content_type.clone(),
+            content_type: mime.to_owned(),
             size: asset.size as u64,
-            target: Target::identify(&asset.name),
+            target: Target::identify(
+                &asset.name,
+                Some(&mime),
+                
+            ),
         }
     }
 }

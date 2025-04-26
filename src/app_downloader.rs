@@ -1,5 +1,6 @@
 use rocket_okapi::JsonSchema;
 use std::fmt::Display;
+use mime::Mime;
 
 fn get_extensions(filename: &str) -> Vec<String> {
     let parts: Vec<String> = filename.split('.').skip(1).map(|s| s.to_string()).collect();
@@ -117,8 +118,47 @@ impl Display for InstallerType {
 }
 
 #[derive(PartialEq, Debug)]
+pub enum ScriptType {
+    Bat,
+    Sh,
+    Ps1,
+    Python,
+    Lua,
+}
+
+impl ScriptType {
+    fn identify(input: &str) -> Option<ScriptType> {
+        let extensions = &get_extensions(input);
+        if extensions.is_empty() {
+            return None;
+        }
+        match extensions.last().unwrap().as_str() {
+            "bat" => Some(ScriptType::Bat),
+            "sh" => Some(ScriptType::Sh),
+            "ps1" => Some(ScriptType::Ps1),
+            "py" => Some(ScriptType::Python),
+            "lua" => Some(ScriptType::Lua),
+            _ => None,
+        }
+    }
+}
+
+impl Display for ScriptType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ScriptType::Bat => write!(f, "bat"),
+            ScriptType::Sh => write!(f, "sh"),
+            ScriptType::Ps1 => write!(f, "ps1"),
+            ScriptType::Python => write!(f, "py"),
+            ScriptType::Lua => write!(f, "lua"),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
 pub enum Filetype {
     Binary,
+    Script(ScriptType),
     Installer(InstallerType),
     Archive(ArchiveType),
     Unknown,
@@ -130,13 +170,35 @@ impl Display for Filetype {
             Filetype::Binary => write!(f, "binary"),
             Filetype::Archive(x) => write!(f, "{}", x),
             Filetype::Installer(x) => write!(f, "{:?} installer", x),
+            Filetype::Script(x) => write!(f, "{:?} script", x),
             Filetype::Unknown => write!(f, "unknown"),
         }
     }
 }
 
 impl Filetype {
-    fn identify(input: &str) -> Filetype {
+    fn content_type_lookup(input: &Mime) -> Filetype {
+        let mime_type = input.essence_str();
+        match mime_type {
+            "application/x-debian-package" => Filetype::Installer(InstallerType::Deb),
+            "application/x-rpm" => Filetype::Installer(InstallerType::Rpm),
+            "application/x-msi" => Filetype::Installer(InstallerType::Msi),
+            "application/x-xar" => Filetype::Installer(InstallerType::Pkg),
+            "application/x-gtar" | "application/gzip" => Filetype::Archive(ArchiveType::TarGz),
+            "application/x-ms-dos-executable" => Filetype::Binary,
+            "application/zip" => Filetype::Archive(ArchiveType::Zip),
+            "application/x-sh" => Filetype::Script(ScriptType::Sh),
+            _ => Filetype::Unknown,
+        }
+    }
+
+    fn identify(input: &str, content_type: Option<&Mime>) -> Filetype {
+        if content_type.is_some() {
+            let parsed = Self::content_type_lookup(content_type.unwrap());
+            if parsed != Filetype::Unknown {
+                return parsed;
+            }
+        }
         let archive = ArchiveType::identify(input);
         if archive.is_some() {
             return Filetype::Archive(archive.unwrap());
@@ -182,7 +244,7 @@ impl TargetOs {
         let normed_input = input.to_lowercase();
         let win = ["win", "windows"];
         let linux = ["linux"];
-        let mac = ["mac", "macos", "macosx", "darwin"];
+        let mac = ["mac", "macos", "osx", "darwin"];
         let freebsd = ["freebsd"];
         let openbsd = ["openbsd"];
         let netbsd = ["netbsd"];
@@ -276,11 +338,11 @@ impl TargetArch {
         let arm = ["arm64"];
         let arm32 = ["arm"];
         let aarch = ["aarch64"];
-        let ppcle = ["ppc64le", "ppcle"];
-        let ppc = ["ppc", "ppc64"];
+        let ppcle = ["ppc64le", "ppc64el" ,"ppcle"];
+        let ppc = ["ppc", "ppc64", "powerpc"];
         let mips64le = ["mips64le"];
         let mips64 = ["mips64"];
-        let mipsle = ["mipsle"];
+        let mipsle = ["mipsle", "mipsel"];
         let mips = ["mips"];
         let riscv = ["riscv"];
 
@@ -382,10 +444,10 @@ pub struct Target {
 }
 
 impl Target {
-    pub(crate) fn identify(input: &str) -> Target {
+    pub(crate) fn identify(input: &str, content_type: Option<&Mime>) -> Target {
         Target {
             deployment: TargetDeployment::identify(input),
-            filetype: Filetype::identify(input),
+            filetype: Filetype::identify(input, content_type),
         }
     }
 
@@ -635,7 +697,7 @@ mod tests {
 
         for case in cases {
             println!("{:?} -> {:?}", case.input, case.expected);
-            assert_eq!(Target::identify(&case.input), case.expected);
+            assert_eq!(Target::identify(&case.input,None ), case.expected);
         }
     }
 }

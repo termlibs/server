@@ -7,7 +7,7 @@ _FORCE={{ force | escape_shell }}
 _COMMAND_NAME={{ app | escape_shell }}
 _FILE_URL={{ file_url | escape_shell }}
 
-
+{#
 _E_GENERIC_ERROR=10
 _TMPDIR="$(mktemp -d)"
 cd "$_TMPDIR"
@@ -125,10 +125,10 @@ _urlget() {
     return "$_E_GENERIC_ERROR"
   fi
 }
+#}
 
-{& if links}
 {% for link in links %}
-_ask_yn -d n "Download {{ link | escape_shell }} to ${_TMPDIR}/${_COMMAND_NAME}?"
+_ask_yn -d n "Download "{{ link | escape_shell }}"" to ${_TMPDIR}/${_COMMAND_NAME}?"
 {% endfor %}
 exit 1
 _urlget "$_FILE_URL" > "$_TMPDIR/${_COMMAND_NAME}"

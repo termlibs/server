@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::app_downloader::{TargetArch, TargetOs};
 use rocket::http::hyper::header::CONTENT_DISPOSITION;
 use rocket::http::{ContentType, Status};
@@ -11,6 +12,7 @@ use rocket_okapi::JsonSchema;
 use std::fmt::Display;
 use std::io;
 use std::io::Cursor;
+use serde_json::{json, Map, Value};
 use crate::supported_apps::Repo;
 
 pub(crate) trait QueryOptions {
@@ -69,9 +71,9 @@ impl InstallQueryOptions {
         self.app = Some(app);
     }
 
-    pub fn template_globals(&self) -> liquid::Object {
-        
-        liquid::object!({
+    pub fn template_globals(&self) -> Map<String, Value> {
+
+        json!({
             "app": self.app.clone(),
             "version": self.version.as_str(),
             "prefix": self.prefix.as_str(),
@@ -82,7 +84,7 @@ impl InstallQueryOptions {
             "force": self.force,
             "quiet": self.quiet,
             "log_level": self.log_level.as_str(),
-        })
+        }).as_object().unwrap().to_owned()
     }
 }
 
