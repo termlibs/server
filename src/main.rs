@@ -146,6 +146,9 @@ async fn root_handler() -> content::RawHtml<String> {
 
 #[launch]
 async fn rocket() -> _ {
+    // make sure the templates are loaded early to check for errors
+    let _ = TEMPLATES;
+
     let port = env::var("PORT")
         .unwrap_or("8080".to_string())
         .parse::<u16>()

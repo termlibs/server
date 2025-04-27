@@ -1,19 +1,12 @@
 use serde_json::{json, Map, Value};
 use shell_quote::{Bash, Quote};
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::process::exit;
 use std::sync::LazyLock;
 use tera::{Filter, Tera};
 
 pub static TEMPLATES: LazyLock<Tera> = LazyLock::new(|| {
-    let mut tera = match Tera::new("templates/*") {
-        Ok(t) => t,
-        Err(e) => {
-            error!("Parsing error(s) while loading tera templates: {}", e);
-            exit(1);
-        }
-    };
+    let mut tera = Tera::default();
+    let _ = tera.add_raw_template("install.sh", include_str!("../templates/install.sh")).unwrap();
     tera.register_filter("escape_shell", ShellEscape);
     tera.register_filter("enumerate", Enumerate);
     tera
@@ -40,8 +33,8 @@ impl Filter for Enumerate {
         if let Some(list) = value.as_array() {
             let mut result: Vec<Value> = Vec::with_capacity(list.len());
             for (i, item) in list.iter().enumerate() {
-                let mut map: Map<String, Value> = Map::new();               
-                map.insert("index".into(), json!(i));                
+                let mut map: Map<String, Value> = Map::new();
+                map.insert("index".into(), json!(i));
                 map.insert("item".into(), item.clone());
                 result.push(Value::Object(map));
             }
