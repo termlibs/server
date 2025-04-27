@@ -6,7 +6,10 @@ use tera::{Filter, Tera};
 
 pub static TEMPLATES: LazyLock<Tera> = LazyLock::new(|| {
     let mut tera = Tera::default();
-    let _ = tera.add_raw_template("install.sh", include_str!("../templates/install.sh")).unwrap();
+    let (install_sh, content) = ("install.sh", include_str!("../templates/install.sh"));
+    info!("Adding template {}", install_sh); // TODO()
+    info!("Content: {}", content);
+    let _ = tera.add_raw_template(install_sh, content).unwrap();
     tera.register_filter("escape_shell", ShellEscape);
     tera.register_filter("enumerate", Enumerate);
     tera

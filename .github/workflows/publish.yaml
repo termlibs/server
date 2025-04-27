@@ -23,6 +23,7 @@ jobs:
           export_environment_variables: true
       - run: gcloud auth configure-docker gcr.io
       - uses: google-github-actions/setup-gcloud@v2
+      - run: find .
       - name: build and push
         uses: docker/build-push-action@v6
         with:
