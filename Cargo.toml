@@ -11,7 +11,7 @@ rocket = { version = "0.5.1", features = ["json"] }
 fern = { version = "0.6.2", features = ["chrono", "colored"] }
 chrono = "0.4.38"
 serde_json = { version = "1.0.140", default-features = false }
-octocrab = { version = "0.44.0", features = ["default-client", "hyper-tls", "rustls"] }
+octocrab = { version = "0.44.0", features = ["default-client", "hyper-rustls", "rustls", "rustls-ring"], default-features = false }
 tera = { version = "1.20.0", default-features = false, features = ["builtins"] }
 shell-quote = { version = "0.7.2", default-features = false, features = ["bash", "sh"] }
 anyhow = "1.0.98"

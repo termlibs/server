@@ -15,8 +15,9 @@ RUN cargo build --release
 FROM alpine:3.20 AS runtime
 
 USER 1000
-WORKDIR /
+WORKDIR /web
 COPY --chown=1000:1000 --from=build /root/build/target/release/termlib-server /usr/bin/termlib-server
 COPY --chown=1000:1000 --from=build /root/termlibs /etc/termlibs
+COPY --chown=1000:1000 ./templates /web/templates
 ENV TERMLIBS_ROOT=/etc/termlibs
 ENTRYPOINT ["termlib-server"]
