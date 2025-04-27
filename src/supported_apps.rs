@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::LazyLock;
 use mime::Mime;
+use serde_json::json;
 use url::Url;
 
 const GITHUB_API: &str = "https://api.github.com";
@@ -104,6 +105,7 @@ pub struct DownloadInfo {
 }
 
 impl DownloadInfo {
+
     pub(crate) fn from_asset(asset: &octocrab::models::repos::Asset) -> Self {
         let mime = asset.content_type.parse::<Mime>().unwrap();
         Self {
@@ -118,6 +120,19 @@ impl DownloadInfo {
                 
             ),
         }
+    }
+    
+    pub fn json(&self) -> serde_json::Value {
+        json!({
+            "name": self.name,
+            "label": self.label,
+            "url": self.url.to_string(),
+            "content_type": self.content_type.to_string(),
+            "filetype": self.target.filetype.to_string(),
+            "os": self.target.deployment.os.to_string(),
+            "arch": self.target.deployment.arch.to_string(),
+            "size": self.size
+        })
     }
 }
 

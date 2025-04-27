@@ -1,4 +1,4 @@
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 use shell_quote::{Bash, Quote};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -15,6 +15,7 @@ pub static TEMPLATES: LazyLock<Tera> = LazyLock::new(|| {
         }
     };
     tera.register_filter("escape_shell", ShellEscape);
+    tera.register_filter("enumerate", Enumerate);
     tera
 });
 
@@ -28,6 +29,25 @@ impl Filter for ShellEscape {
             Ok(Value::String(String::from_utf8(escaped).unwrap()))
         } else {
             Ok(Value::String("".into()))
+        }
+    }
+}
+
+struct Enumerate;
+
+impl Filter for Enumerate {
+    fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> tera::Result<Value> {
+        if let Some(list) = value.as_array() {
+            let mut result: Vec<Value> = Vec::with_capacity(list.len());
+            for (i, item) in list.iter().enumerate() {
+                let mut map: Map<String, Value> = Map::new();               
+                map.insert("index".into(), json!(i));                
+                map.insert("item".into(), item.clone());
+                result.push(Value::Object(map));
+            }
+            Ok(Value::Array(result))
+        } else {
+            Ok(Value::Array(Vec::new()))
         }
     }
 }

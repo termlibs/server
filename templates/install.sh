@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+#{# template engine Tera #}
 
+set -euo pipefail
+RUN_DIRECTORY="$PWD"
 _QUIET={{ quiet | escape_shell }}
 _FORCE={{ force | escape_shell }}
-_COMMAND_NAME={{ app | escape_shell }}
-_FILE_URL={{ file_url | escape_shell }}
+_CANONICAL_BINARY_NAME={{ app | escape_shell }}
 
-{#
 _E_GENERIC_ERROR=10
 _TMPDIR="$(mktemp -d)"
 cd "$_TMPDIR"
@@ -70,54 +70,71 @@ _log() {
    esac
 }
 
-_ask () {
-    [ "$_QUIET" = true ] && return
-    local opts DEFAULT
-    opts="$(getopt -o "d:" --long "default:" -n "${FUNCNAME[0]}" -- "$@")"
-    [ $? -eq 0 ] || return 1
-    eval set -- "$opts"
-    DEFAULT=yes
-    while true; do
-      case "$1" in
-        -d | --default)
-          DEFAULT="$2"
-          _log TRACE "Using custom default, $DEFAULT"
-          shift 2
-          ;;
-        --)
-          shift
-          break
-          ;;
-      esac
-    done
-    local prompt="$1"
-    local answer
-    read -r -p "$prompt ($DEFAULT): " answer
-    [ -z "$answer" ] && answer="$DEFAULT"
-    printf "$answer"
-}
-
-_ask_yn () {
-    [ "$_QUIET" = true ] && return
-    echo "Asking: ${@}"
-    local answer
-    answer="$(_ask "${@}")"
-    case "$answer" in
-      Y | y | yes)
-        return 0
+_ask_choices() {
+  local choice choices opt add_none add_quit idx
+  opt="$(getopt -o "" --long "none,quit" -n "${FUNCNAME[0]}" -- "$@")"
+  [ "$?" -eq 0 ] || {
+    _log FATAL "invalid options"
+    exit 1
+  }
+  eval set -- "$opt"
+  add_none=false
+  add_quit=false
+  while true; do
+    case "$1" in
+      --quit)
+        add_quit=true
+        shift
         ;;
-      N | n | no)
-        return 1
+      --none)
+        add_none=true
+        shift
         ;;
-      *)
-        _log FATAL "invalid answer: $answer, using 'no'"
+      --)
+        shift
+        break
         ;;
     esac
+  done
+  choices=("$@")
+  {% raw %}
+  if [ "${#choices[@]}" -eq 0 ]; then
+    _log FATAL "no choices provided"
+    exit 1
+  fi
+  {% endraw %}
+
+  idx=1
+  for c in "${choices[@]}"; do
+    printf "\t%s)\t%s\n" "$idx" "$c" 1>&2
+    idx=$((idx + 1))
+  done
+
+  if [ "$add_none" = true ]; then
+    printf "\tn)\tnone\n" 1>&2
+  fi
+  if [ "$add_quit" = true ]; then
+    printf "\tq)\tquit\n" 1>&2
+  fi
+
+  printf "Enter choice: " 1>&2
+  read -r choice
+
+  local final_choices=()
+  for c in $choice; do
+    case "$choice" in
+      [0-9]*)
+        c=$((c - 1))
+    esac
+    final_choices+=("$c")
+  done
+  echo "${final_choices[@]}"
 }
+
 
 _urlget() {
   if command -v curl &> /dev/null; then
-    curl -fsSLo - "$1" 2> /dev/null
+    curl -fsSL "$1" 2> /dev/null
   elif command -v wget &> /dev/null; then
     wget -qO- "$1" 2> /dev/null
   else
@@ -125,11 +142,84 @@ _urlget() {
     return "$_E_GENERIC_ERROR"
   fi
 }
-#}
+{% if (assets | length  > 0) %}
+_urls=( {% for asset in assets %}{{ asset.url | escape_shell }} {% endfor %})
+_filenames=( {% for asset in assets %}{{ asset.name | escape_shell }} {% endfor %})
+_filetypes=( {% for asset in assets %}{{ asset.filetype | escape_shell }} {% endfor %})
+_printables=( {% for asset in assets %}{{ asset.name ~ " (" ~ asset.filetype ~ ")" | escape_shell }} {% endfor %})
 
-{% for link in links %}
-_ask_yn -d n "Download "{{ link | escape_shell }}"" to ${_TMPDIR}/${_COMMAND_NAME}?"
-{% endfor %}
-exit 1
-_urlget "$_FILE_URL" > "$_TMPDIR/${_COMMAND_NAME}"
-ls -lh
+printf "Please select one of the following:\n"
+choice="$(_ask_choices --quit "${_printables[@]}")"
+
+case "$choice" in
+  q|n)
+    exit 0
+    ;;
+  [0-9]*)
+    if ! [ "$choice" -lt {% raw %}"${#_urls[@]}"{% endraw %} ]; then
+      _log FATAL "invalid choice: $choice"
+    fi
+    ;;
+  *)
+    _log FATAL "invalid choice: $choice"
+    ;;
+esac
+
+printf "Downloading from %s to %s\n" "${_urls[$choice]}" "$_TMPDIR"
+_type="${_filetypes[$choice]}"
+case "$_type" in
+  "binary" | "Deb installer")
+    filename="${_filenames[$choice]}"
+    saved_file="$_TMPDIR/$filename"
+    _urlget "${_urls[$choice]}" > "$saved_file"
+
+    if [ "$_type" = "Deb installer" ]; then
+      if command -v dpkg &> /dev/null; then
+        printf "trying to install with dpkg, this may prompt for sudo\n"
+        dpkg -i "$saved_file" || sudo dpkg -i "$saved_file"
+      else
+        _log FATAL "dpkg not found, unable to install package"
+      fi
+    elif [ "$_type" = "binary" ]; then
+      chmod +x "$saved_file"
+
+      if [ -z "$_CANONICAL_BINARY_NAME" ]; then
+        read -r -p "enter alternate binary name (default: $filename): " binary_name
+        binary_name="${binary_name:-$filename}"
+      else
+        binary_name="$_CANONICAL_BINARY_NAME"
+      fi
+      read -r -p "enter alternate binary directory (default: $RUN_DIRECTORY/bin): " binary_dir
+      binary_dir="${binary_dir:-$RUN_DIRECTORY/bin}"
+      mkdir -p "$binary_dir"
+      cp "$saved_file" "$binary_dir/$binary_name"
+    else
+      _log FATAL "invalid filetype: $_type"
+    fi
+    ;;
+  "tar.gz")
+    filename="${_filenames[$choice]}"
+    _urlget "${_urls[$choice]}" | tar xz
+    executable_files=( $( find . -type f -executable -exec printf '{} ' \; ) )
+    {% raw %}
+    if [ "${#executable_files[@]}" -e 0 ]; then  {# raw block here to allow for the comment looking shell op #}
+    {% endraw %}
+      _log FATAL "no executable files found in archive"
+    else
+      choices="$(_ask_choices --quit ${executable_files[@]})"
+    fi
+    for choice in $choices; do
+      case "$choice" in
+        [0-9]*)
+          cp ${executable_files[$choice]} "$RUN_DIRECTORY/bin"
+          ;;
+      esac
+    done
+    ;;
+  *)
+    _log FATAL "invalid filetype: ${_filetypes[$choice]}"
+    ;;
+esac
+{% else %}
+_log FATAL "no assets found"
+{% endif %}

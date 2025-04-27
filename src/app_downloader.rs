@@ -401,8 +401,8 @@ impl TargetArch {
 
 #[derive(PartialEq, Debug)]
 pub struct TargetDeployment {
-    os: TargetOs,
-    arch: TargetArch,
+    pub(crate) os: TargetOs,
+    pub(crate) arch: TargetArch,
 }
 
 impl Display for TargetDeployment {

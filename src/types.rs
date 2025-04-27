@@ -63,7 +63,7 @@ pub struct InstallQueryOptions {
     #[field(default = false)]
     quiet: bool,
     #[field(default = "DEBUG")]
-    log_level: String,
+    pub(crate) log_level: String,
 }
 
 impl InstallQueryOptions {

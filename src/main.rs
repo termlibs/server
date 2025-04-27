@@ -4,31 +4,27 @@ extern crate rocket;
 
 mod app_downloader;
 mod gh;
-mod shell_files;
 mod static_site;
 mod supported_apps;
 mod templates;
 mod types;
 
-use crate::app_downloader::{Target, TargetDeployment, TargetOs};
+use crate::app_downloader::{TargetDeployment, TargetOs};
 use crate::gh::get_github_download_links;
-use crate::supported_apps::{Repo, SupportedApp};
+use crate::supported_apps::{DownloadInfo, Repo, SupportedApp};
 use crate::templates::TEMPLATES;
 use crate::types::{ScriptResponse, StringList};
 use log::info;
 use rocket::http::ContentType;
-use rocket::response::{content, status};
+use rocket::response::content;
 use rocket::serde::json::json;
-use rocket::yansi::Paint;
 use rocket::{Request, Response};
-use rocket_okapi::okapi::schemars;
-use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket_okapi::settings::UrlObject;
 use rocket_okapi::{openapi, openapi_get_routes, rapidoc::*};
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use std::{env, io};
-use tera::{Context, Tera};
+use std::env;
+use tera::Context;
 use types::InstallQueryOptions;
 
 const FAVICON: &[u8] = include_bytes!("../favicon.ico");
@@ -80,19 +76,29 @@ async fn install_arbitrary_github_handler(
     user: &str,
     repo: &str,
     mut q: InstallQueryOptions,
-) -> StringList {
+) -> ScriptResponse {
     debug!("install_arbitrary_github_handler({:?}, {:?}) with {:#?}", user, repo, q);
     let unsupported_app = SupportedApp::new(
         "unsupported",
         Repo::github(&format!("{}/{}", user, repo)),
         "github",
     );
-    let links = load_app(&mut q, &unsupported_app).await;
-    StringList::new(links.unwrap())
-    // match links {
-    //     Ok(links) => StringList::new(links),
-    //     Err(e) => status::NotFound(format!("Not Found {:?}", e)),
-    // }
+
+    let links = load_app(&mut q, &unsupported_app).await.unwrap();
+    let json_links: Vec<serde_json::Value> = links.iter().map(|x| x.json()).collect();
+    let tera_context = Context::from_value(
+        json!({
+            "app": "",
+            "force": false,
+            "quiet": false,
+            "assets": json_links,
+            "log_level": q.log_level.clone()
+        })
+    ).unwrap();
+    let script = TEMPLATES.render("install.sh", &tera_context);
+    // StringList::new(links.unwrap())
+
+    ScriptResponse::new(format!("install.sh"), script.unwrap())
 }
 
 #[openapi()]
@@ -104,13 +110,14 @@ async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptRespons
     let supported_app = supported_apps::get_app(app).unwrap();
 
     let links = load_app(&mut q, &supported_app).await.unwrap();
+    let json_links: Vec<serde_json::Value> = links.iter().map(|x| x.json()).collect();
     let tera_context = Context::from_value(
         json!({
-            "links": links,
             "app": app,
             "force": false,
             "quiet": false,
-            "file_url": "something"
+            "assets": json_links,
+            "log_level": q.log_level.clone()
         })
     ).unwrap();
     let script = TEMPLATES.render("install.sh", &tera_context);
@@ -119,20 +126,13 @@ async fn install_handler(app: &str, mut q: InstallQueryOptions) -> ScriptRespons
     ScriptResponse::new(format!("install-{}.sh", app), script.unwrap())
 }
 
-async fn load_app(q: &mut InstallQueryOptions, supported_app: &SupportedApp) -> anyhow::Result<Vec<String>> {
+async fn load_app(q: &mut InstallQueryOptions, supported_app: &SupportedApp) -> anyhow::Result<Vec<DownloadInfo>> {
     let arch = q.arch.clone();
     let os = q.os.clone();
     let version = q.version.clone();
     let target_deployment = TargetDeployment::new(os, arch);
     debug!("target_deployment loaded: {:#?}", target_deployment);
-    let links = get_github_download_links(&supported_app.repo, &target_deployment, &version).await;
-
-    let mut response = Response::new();
-    let mut globals = q.template_globals();
-    response.set_header(ContentType::new("application", "json"));
-
-    let links_strings: Vec<String> = links?.iter().map(|link| link.url.to_string()).collect();
-    Ok(links_strings)
+    get_github_download_links(&supported_app.repo, &target_deployment, &version).await
 }
 
 #[openapi()]
