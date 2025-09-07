@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "xtask"]
+resolver = "2"
+
 [package]
 name = "termlib-server"
 version = "0.3.0"
@@ -20,3 +24,4 @@ axum = "0.8.4"
 tower-http = { version = "0.6.6", features = ["cors"] }
 serde = { version = "1.0.219", features = ["derive"] }
 utoipa = "5.4.0"
+axum-test = "18.1.0"
