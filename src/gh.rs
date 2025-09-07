@@ -2,6 +2,7 @@ use crate::app_downloader::TargetDeployment;
 use crate::supported_apps::{DownloadInfo, Repo};
 use octocrab::models::repos::Release;
 use std::fmt::Display;
+use log::debug;
 
 const MIN_ASSET_SIZE: u64 = 64 * 1024; // arbitrary, may need to change if we start installing scripts
 

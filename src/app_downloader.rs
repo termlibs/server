@@ -1,4 +1,5 @@
-use rocket_okapi::JsonSchema;
+use utoipa::ToSchema;
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use mime::Mime;
 
@@ -12,7 +13,7 @@ fn get_extensions(filename: &str) -> Vec<String> {
         .collect()
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
 pub enum ArchiveType {
     Tar,
     TarGz,
@@ -79,7 +80,7 @@ impl ArchiveType {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
 pub enum InstallerType {
     Msi,
     Exe,
@@ -117,7 +118,7 @@ impl Display for InstallerType {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
 pub enum ScriptType {
     Bat,
     Sh,
@@ -155,7 +156,7 @@ impl Display for ScriptType {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
 pub enum Filetype {
     Binary,
     Script(ScriptType),
@@ -222,7 +223,8 @@ impl Filetype {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, FromFormField, JsonSchema)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Clone)]
 pub enum TargetOs {
     Windows,
     Linux,
@@ -287,7 +289,8 @@ impl Display for TargetOs {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, FromFormField, JsonSchema)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Clone)]
 pub(crate) enum TargetArch {
     Amd64,
     Arm64,
@@ -399,7 +402,7 @@ impl TargetArch {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
 pub struct TargetDeployment {
     pub(crate) os: TargetOs,
     pub(crate) arch: TargetArch,
@@ -434,10 +437,10 @@ impl Default for TargetDeployment {
             arch: TargetArch::Amd64,
         }
     }
-    
+
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
 pub struct Target {
     pub deployment: TargetDeployment,
     pub filetype: Filetype,

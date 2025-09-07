@@ -2,6 +2,7 @@ use serde_json::{json, Map, Value};
 use shell_quote::{Bash, Quote};
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use log::info;
 use tera::{Filter, Tera};
 
 pub static TEMPLATES: LazyLock<Tera> = LazyLock::new(|| {
