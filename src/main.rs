@@ -9,7 +9,8 @@ use axum::{
 };
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
-
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 mod app_downloader;
 mod gh;
 mod static_site;
@@ -21,14 +22,13 @@ use crate::app_downloader::TargetDeployment;
 use crate::gh::get_github_download_links;
 use crate::supported_apps::{DownloadInfo, Repo, SupportedApp};
 use crate::templates::TEMPLATES;
-use crate::types::ScriptResponse;
+use crate::types::{InstallMethod, InstallQueryOptions, ScriptResponse, TargetArch, TargetOs};
 use log::{debug, info, warn};
 use serde_json::json;
 use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use tera::Context;
-use types::InstallQueryOptions;
 
 const FAVICON: &[u8] = include_bytes!("../favicon.ico");
 static TERMLIBS_ROOT: LazyLock<PathBuf> =
@@ -63,71 +63,103 @@ async fn favicon() -> impl IntoResponse {
   (StatusCode::OK, [("Content-Type", "image/x-icon")], FAVICON)
 }
 
+#[utoipa::path(
+  get,
+  path = "/install/{user}/{repo}",
+  params(
+    ("user" = String, Path, description = "GitHub username"),
+    ("repo" = String, Path, description = "GitHub repository name")
+  ),
+  responses(
+    (status = 200, description = "Install script for arbitrary GitHub repository", body = ScriptResponse, content_type = "application/x-sh")
+  ),
+  tag = "install"
+)]
 async fn install_arbitrary_github_handler(
   Path((user, repo)): Path<(String, String)>,
   Query(mut q): Query<InstallQueryOptions>,
 ) -> impl IntoResponse {
-  log::debug!(
-        "install_arbitrary_github_handler({:?}, {:?}) with {:#?}",
-        user,
-        repo,
-        q
-    );
+  debug!(
+    "install_arbitrary_github_handler({:?}, {:?}) with {:#?}",
+    user, repo, q
+  );
   let unsupported_app = SupportedApp::new(
     "unsupported",
     Repo::github(&format!("{}/{}", user, repo)),
     "github",
   );
 
-  let links = load_app(&mut q, &unsupported_app).await.unwrap();
+  let (target, links) = load_app(&mut q, &unsupported_app).await.unwrap();
   let json_links: Vec<serde_json::Value> = links.iter().map(|x| x.json()).collect();
   let tera_context = Context::from_value(json!({
-        "app": "",
-        "force": false,
-        "quiet": false,
-        "assets": json_links,
-        "log_level": q.log_level.clone()
-    }))
-    .unwrap();
-  let script = TEMPLATES.render("install.sh", &tera_context);
+      "app": "",
+      "force": false,
+      "quiet": false,
+      "assets": json_links,
+      "log_level": q.log_level.clone()
+  }))
+  .unwrap();
+  let (script, extension) = match target.os {
+    TargetOs::Windows => (TEMPLATES.render("install.ps1", &tera_context), "ps1"),
+    TargetOs::Linux => (TEMPLATES.render("install.sh", &tera_context), "sh"),
+    _ => (TEMPLATES.render("install.sh", &tera_context), "sh"),
+  };
 
-  ScriptResponse::new(format!("install.sh"), script.unwrap())
+  ScriptResponse::new(format!("install.{}", extension), script.unwrap())
 }
 
+#[utoipa::path(
+  get,
+  path = "/install/{app}",
+  params(
+    ("app" = String, Path, description = "Application name (e.g., yq, jq, gh)")
+  ),
+  responses(
+    (status = 200, description = "Install script for the application", body = ScriptResponse, content_type = "application/x-sh")
+  ),
+  tag = "install"
+)]
 async fn install_handler(
   Path(app): Path<String>,
   Query(mut q): Query<InstallQueryOptions>,
 ) -> impl IntoResponse {
-  log::debug!("install_handler({:?}, {:?})", app, q);
+  debug!("install_handler({:?}, {:?})", app, q);
   q.set_app(app.clone());
 
   let supported_app = supported_apps::get_app(&app).unwrap();
 
-  let links = load_app(&mut q, &supported_app).await.unwrap();
+  let (target, links) = load_app(&mut q, &supported_app).await.unwrap();
   let json_links: Vec<serde_json::Value> = links.iter().map(|x| x.json()).collect();
   let tera_context = Context::from_value(json!({
-        "app": app,
-        "force": false,
-        "quiet": false,
-        "assets": json_links,
-        "log_level": q.log_level.clone()
-    }))
-    .unwrap();
-  let script = TEMPLATES.render("install.sh", &tera_context);
+      "app": app,
+      "force": false,
+      "quiet": false,
+      "assets": json_links,
+      "log_level": q.log_level.clone()
+  }))
+  .unwrap();
+  let (script, extension) = match target.os {
+    TargetOs::Windows => (TEMPLATES.render("install.ps1", &tera_context), "ps1"),
+    TargetOs::Linux => (TEMPLATES.render("install.sh", &tera_context), "sh"),
+    _ => (TEMPLATES.render("install.sh", &tera_context), "sh"),
+  };
 
-  ScriptResponse::new(format!("install-{}.sh", app), script.unwrap())
+  ScriptResponse::new(format!("install-{}.{}", app, extension), script.unwrap())
 }
 
 async fn load_app(
   q: &mut InstallQueryOptions,
   supported_app: &SupportedApp,
-) -> anyhow::Result<Vec<DownloadInfo>> {
+) -> anyhow::Result<(TargetDeployment, Vec<DownloadInfo>)> {
   let arch = q.arch.clone();
   let os = q.os.clone();
   let version = q.version.clone();
   let target_deployment = TargetDeployment::new(os, arch);
   debug!("target_deployment loaded: {:#?}", target_deployment);
-  get_github_download_links(&supported_app.repo, &target_deployment, &version).await
+  Ok((
+    target_deployment.clone(),
+    get_github_download_links(&supported_app.repo, &target_deployment, &version).await?,
+  ))
 }
 
 async fn root_handler() -> impl IntoResponse {
@@ -136,6 +168,35 @@ async fn root_handler() -> impl IntoResponse {
   let html = static_site::load_static("index.html").unwrap_or("".to_string());
   Html(html)
 }
+
+#[derive(OpenApi)]
+#[openapi(
+  info(
+    title = "Termlibs API",
+    version = "0.3.0",
+    description = "Terminal library installer API - Generate install scripts for popular CLI tools",
+    contact(
+      name = "Termlibs",
+      email = "adam@huganir.com",
+      url = "https://github.com/termlibs"
+    )
+  ),
+  servers(
+    (url = "http://localhost:8000/v1", description = "Local server"),
+    (url = "https://termlibs.dev/v1", description = "Production server")
+  ),
+  paths(
+    install_handler,
+    install_arbitrary_github_handler
+  ),
+  components(
+    schemas(InstallQueryOptions, ScriptResponse, InstallMethod, TargetOs, TargetArch)
+  ),
+  tags(
+    (name = "install", description = "Install script generation")
+  )
+)]
+struct ApiDoc;
 
 #[tokio::main]
 async fn main() {
@@ -166,14 +227,18 @@ async fn main() {
 }
 
 fn build_app() -> Router {
-  let app = Router::new()
-    .route("/", get(root_handler))
-    .route("/favicon.ico", get(favicon))
+  let v1_router = Router::new()
     .route(
       "/install/{user}/{repo}",
       get(install_arbitrary_github_handler),
     )
-    .route("/install/{app}", get(install_handler))
+    .route("/install/{app}", get(install_handler));
+
+  let app = Router::new()
+    .route("/", get(root_handler))
+    .route("/favicon.ico", get(favicon))
+    .nest("/v1", v1_router)
+    .merge(SwaggerUi::new("/swagger-ui").url("/openapi.json", ApiDoc::openapi()))
     .layer(CorsLayer::permissive());
   app
 }
@@ -199,7 +264,7 @@ mod tests {
   #[tokio::test]
   async fn test_install_yutc() {
     let server = test_server().await;
-    let response = server.get("/install/yutc").await;
+    let response = server.get("v1/install/yutc").await;
     response.assert_status_ok();
     response.assert_header("Content-Type", "application/x-sh");
   }

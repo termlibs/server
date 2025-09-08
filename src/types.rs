@@ -1,11 +1,12 @@
-use crate::app_downloader::{TargetArch, TargetOs};
+pub(crate) use crate::app_downloader::{TargetArch, TargetOs};
+use crate::supported_apps::Repo;
 use axum::body::Body;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::fmt::Display;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 pub(crate) trait QueryOptions {
     fn to_args(&self) -> String;
@@ -35,7 +36,7 @@ impl From<&str> for InstallMethod {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize, ToSchema, IntoParams)]
 pub struct InstallQueryOptions {
     app: Option<String>,
     #[serde(default = "default_latest")]
@@ -44,6 +45,7 @@ pub struct InstallQueryOptions {
     prefix: String,
     #[serde(default = "default_arch")]
     pub(crate) arch: TargetArch,
+    #[into_params(names("os"))]
     #[serde(default = "default_os")]
     pub(crate) os: TargetOs,
     #[serde(default = "default_method")]
