@@ -23,9 +23,9 @@ Set-Location $_TMPDIR.FullName
 $cleanup = {
     if (Test-Path $_TMPDIR) {
         Write-LogMessage "DEBUG" "Removing $_TMPDIR"
-        Set-Location $RUN_DIRECTORY
         Remove-Item $_TMPDIR -Recurse -Force -ErrorAction SilentlyContinue
     }
+    Set-Location $RUN_DIRECTORY
 }
 
 # Register cleanup on exit

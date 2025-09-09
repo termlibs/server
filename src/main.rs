@@ -71,7 +71,8 @@ async fn favicon() -> impl IntoResponse {
     ("repo" = String, Path, description = "GitHub repository name")
   ),
   responses(
-    (status = 200, description = "Install script for arbitrary GitHub repository", body = ScriptResponse, content_type = "application/x-sh")
+    (status = 200, description = "Install script (bash)for arbitrary GitHub repository", body = ScriptResponse, content_type = "application/x-sh"),
+    (status = 200, description = "Install script (powershell) for arbitrary GitHub repository", body = ScriptResponse, content_type = "application/x-powershell")
   ),
   tag = "install"
 )]
@@ -118,7 +119,8 @@ async fn install_arbitrary_github_handler(
     ("prefix" = Option<String>, Query, description = "install directory", nullable)
   ),
   responses(
-    (status = 200, description = "Install script for the application", body = ScriptResponse, content_type = "application/x-sh")
+    (status = 200, description = "Install script (bash) for the application", body = ScriptResponse, content_type = "application/x-sh"),
+    (status = 200, description = "Install script (powershell) for the application", body = ScriptResponse, content_type = "application/x-powershell")
   ),
   tag = "install"
 )]
