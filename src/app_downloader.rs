@@ -1,9 +1,42 @@
 use mime::Mime;
-use serde::{Deserialize, Serialize};
+use paste::paste;
+use serde::de::{Error, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::Display;
 use utoipa::ToSchema;
 
-// Then update all the derives to include ToSchema:
+/// Macro to implement case-insensitive string deserialization for enums with an `identify` method
+macro_rules! impl_caseless_deserialize {
+    ($enum_type:ident) => {
+        paste! {
+            struct [<$enum_type Visitor>];
+
+            impl<'de> Visitor<'de> for [<$enum_type Visitor>] {
+                type Value = $enum_type;
+
+                fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+                    formatter.write_str("Expected string, case insensitive")
+                }
+
+                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                where
+                    E: Error,
+                {
+                    Ok($enum_type::identify(v))
+                }
+            }
+
+            impl<'de> Deserialize<'de> for $enum_type {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: Deserializer<'de>,
+                {
+                    deserializer.deserialize_str([<$enum_type Visitor>])
+                }
+            }
+        }
+    };
+}
 
 fn get_extensions(filename: &str) -> Vec<String> {
   let parts: Vec<String> = filename.split('.').skip(1).map(|s| s.to_string()).collect();
@@ -225,7 +258,7 @@ impl Filetype {
   }
 }
 
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(PartialEq, Debug, Clone, Serialize, ToSchema)]
 pub enum TargetOs {
   Windows,
   Linux,
@@ -235,6 +268,8 @@ pub enum TargetOs {
   Netbsd,
   Unknown,
 }
+
+impl_caseless_deserialize!(TargetOs);
 
 impl From<&str> for TargetOs {
   fn from(input: &str) -> Self {
@@ -290,7 +325,7 @@ impl Display for TargetOs {
   }
 }
 
-#[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema, Clone)]
+#[derive(PartialEq, Debug, Serialize, ToSchema, Clone)]
 pub(crate) enum TargetArch {
   Amd64,
   Arm64,
@@ -307,6 +342,8 @@ pub(crate) enum TargetArch {
   x86,
   Unknown,
 }
+
+impl_caseless_deserialize!(TargetArch);
 
 impl From<&str> for TargetArch {
   fn from(value: &str) -> Self {

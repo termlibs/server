@@ -26,3 +26,4 @@ serde = { version = "1.0.219", features = ["derive"] }
 utoipa = "5.4.0"
 axum-test = "18.1.0"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
+paste = "1.0.15"

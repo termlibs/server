@@ -112,7 +112,10 @@ async fn install_arbitrary_github_handler(
   get,
   path = "/install/{app}",
   params(
-    ("app" = String, Path, description = "Application name (e.g., yq, jq, gh)")
+    ("app" = String, Path, description = "Application name (e.g., yq, jq, gh)"),
+    ("os" = Option<String>, Query, description = "target os"),
+    ("arch" = Option<String>, Query, description = "target architecture", nullable),
+    ("prefix" = Option<String>, Query, description = "install directory", nullable)
   ),
   responses(
     (status = 200, description = "Install script for the application", body = ScriptResponse, content_type = "application/x-sh")
@@ -264,7 +267,7 @@ mod tests {
   #[tokio::test]
   async fn test_install_yutc() {
     let server = test_server().await;
-    let response = server.get("v1/install/yutc").await;
+    let response = server.get("/v1/install/yutc").await;
     response.assert_status_ok();
     response.assert_header("Content-Type", "application/x-sh");
   }

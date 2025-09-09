@@ -45,7 +45,6 @@ pub struct InstallQueryOptions {
     prefix: String,
     #[serde(default = "default_arch")]
     pub(crate) arch: TargetArch,
-    #[into_params(names("os"))]
     #[serde(default = "default_os")]
     pub(crate) os: TargetOs,
     #[serde(default = "default_method")]
