@@ -38,6 +38,7 @@ impl From<&str> for InstallMethod {
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, ToSchema, IntoParams)]
 pub struct InstallQueryOptions {
+  #[serde(skip)]
   app: Option<String>,
   #[serde(default = "default_latest")]
   pub(crate) version: String,

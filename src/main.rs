@@ -116,7 +116,8 @@ async fn install_arbitrary_github_handler(
     ("app" = String, Path, description = "Application name (e.g., yq, jq, gh)"),
     ("os" = Option<String>, Query, description = "target os"),
     ("arch" = Option<String>, Query, description = "target architecture", nullable),
-    ("prefix" = Option<String>, Query, description = "install directory", nullable)
+    ("prefix" = Option<String>, Query, description = "install directory", nullable),
+    ("version" = Option<String>, Query, description = "app version, default is latest", nullable)
   ),
   responses(
     (status = 200, description = "Install script (bash) for the application", body = ScriptResponse, content_type = "application/x-sh"),

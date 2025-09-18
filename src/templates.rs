@@ -51,6 +51,14 @@ impl Filter for Enumerate {
   }
 }
 
+struct Powershell;
+
+impl Powershell {
+  fn quote(&self, to_escape: &str) -> Vec<u8> {
+    todo!()
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
