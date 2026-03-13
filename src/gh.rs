@@ -1,4 +1,4 @@
-use crate::app_downloader::TargetDeployment;
+use crate::domain::platform::TargetDeployment;
 use crate::error::AppError;
 use crate::supported_apps::{DownloadInfo, Repo};
 use log::debug;

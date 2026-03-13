@@ -1,4 +1,4 @@
-use crate::app_downloader::TargetOs;
+use crate::domain::platform::TargetOs;
 use crate::error::AppError;
 use crate::supported_apps::DownloadInfo;
 use crate::templates::TEMPLATES;

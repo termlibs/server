@@ -1,4 +1,4 @@
-pub(crate) use crate::app_downloader::{TargetArch, TargetOs};
+use crate::domain::platform::{TargetArch, TargetOs};
 use axum::body::Body;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};

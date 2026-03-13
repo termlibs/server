@@ -1,4 +1,5 @@
-use crate::app_downloader::{Target, TargetDeployment};
+use crate::domain::download::Target;
+use crate::domain::platform::TargetDeployment;
 use crate::error::AppError;
 use crate::gh::get_github_download_links;
 use mime::Mime;
