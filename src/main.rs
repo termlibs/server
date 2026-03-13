@@ -18,19 +18,16 @@ mod static_site;
 mod supported_apps;
 mod templates;
 mod types;
+mod services;
 
-use crate::app_downloader::TargetDeployment;
 use crate::error::AppError;
-use crate::gh::get_github_download_links;
-use crate::supported_apps::{DownloadInfo, Repo, SupportedApp};
+use crate::services::installer;
 use crate::templates::TEMPLATES;
 use crate::types::{InstallMethod, InstallQueryOptions, ScriptResponse, TargetArch, TargetOs};
 use log::{debug, info, warn};
-use serde_json::Value;
 use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use tera::Context;
 
 const FAVICON: &[u8] = include_bytes!("../favicon.ico");
 static TERMLIBS_ROOT: LazyLock<PathBuf> =
@@ -86,22 +83,7 @@ async fn install_arbitrary_github_handler(
         "install_arbitrary_github_handler({:?}, {:?}) with {:#?}",
         user, repo, q
     );
-    let app_name = format!("{}/{}", user, repo);
-    let target_app = SupportedApp::new(&app_name, Repo::github(&app_name), "github");
-
-    q.set_app(app_name.clone());
-    let (target, links) = load_app(&mut q, &target_app).await?;
-    let json_links: Vec<Value> = links.iter().map(|x| x.json()).collect();
-    let mut globals = q.template_globals();
-    globals.insert("assets".to_string(), Value::Array(json_links));
-    let tera_context = Context::from_serialize(globals)?;
-    let (script, extension) = match target.os {
-        TargetOs::Windows => (TEMPLATES.render("install.ps1", &tera_context)?, "ps1"),
-        TargetOs::Linux => (TEMPLATES.render("install.sh", &tera_context)?, "sh"),
-        _ => (TEMPLATES.render("install.sh", &tera_context)?, "sh"),
-    };
-
-    Ok(ScriptResponse::new(format!("install.{}", extension), script))
+    installer::build_arbitrary_github_install_script(&user, &repo, &mut q).await
 }
 
 #[utoipa::path(
@@ -125,46 +107,7 @@ async fn install_handler(
     Query(mut q): Query<InstallQueryOptions>,
 ) -> Result<ScriptResponse, AppError> {
     debug!("install_handler({:?}, {:?})", app, q);
-    q.set_app(app.clone());
-
-    let supported_app =
-        supported_apps::get_app(&app).ok_or_else(|| AppError::UnsupportedApp(app.clone()))?;
-
-    let (target, links) = load_app(&mut q, &supported_app).await?;
-    let json_links: Vec<Value> = links.iter().map(|x| x.json()).collect();
-    let mut globals = q.template_globals();
-    globals.insert("assets".to_string(), Value::Array(json_links));
-    let tera_context = Context::from_serialize(globals)?;
-    let (script, extension) = match target.os {
-        TargetOs::Windows => (TEMPLATES.render("install.ps1", &tera_context)?, "ps1"),
-        TargetOs::Linux => (TEMPLATES.render("install.sh", &tera_context)?, "sh"),
-        _ => (TEMPLATES.render("install.sh", &tera_context)?, "sh"),
-    };
-
-    Ok(ScriptResponse::new(
-        format!("install-{}.{}", supported_app.shortname, extension),
-        script,
-    ))
-}
-
-async fn load_app(
-    q: &mut InstallQueryOptions,
-    supported_app: &SupportedApp,
-) -> Result<(TargetDeployment, Vec<DownloadInfo>), AppError> {
-    let arch = q.arch.clone();
-    let os = q.os.clone();
-    let version = q.version.clone();
-    let target_deployment = TargetDeployment::new(os, arch);
-    debug!("target_deployment loaded: {:#?}", target_deployment);
-    let links = get_github_download_links(&supported_app.repo, &target_deployment, &version).await?;
-    if links.is_empty() {
-        return Err(AppError::NoMatchingAssets {
-            repo: supported_app.shortname.clone(),
-            target: target_deployment.to_string(),
-        });
-    }
-
-    Ok((target_deployment, links))
+    installer::build_supported_install_script(&app, &mut q).await
 }
 
 async fn root_handler() -> impl IntoResponse {
