@@ -33,7 +33,7 @@ Register-EngineEvent PowerShell.Exiting -Action $cleanup | Out-Null
 trap { & $cleanup; break }
 
 # Log level configuration
-$INSTALL_LOG_LEVEL = "{{ log_level | escape_shell }}"
+$INSTALL_LOG_LEVEL = {{ log_level | escape_shell }}
 switch ($INSTALL_LOG_LEVEL) {
     "TRACE" {
         $INSTALL_LOG_LEVEL = 0
