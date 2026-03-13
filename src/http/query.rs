@@ -50,6 +50,8 @@ pub(crate) struct InstallQueryOptions {
   quiet: bool,
   #[serde(default = "default_log_level")]
   pub(crate) log_level: String,
+  #[serde(default = "default_inline")]
+  pub(crate) inline: bool,
 }
 
 fn default_latest() -> String {
@@ -88,6 +90,10 @@ fn default_log_level() -> String {
   "DEBUG".to_string()
 }
 
+fn default_inline() -> bool {
+  false
+}
+
 impl InstallQueryOptions {
   pub(crate) fn set_app(&mut self, app: String) {
     self.app = Some(app);
@@ -105,6 +111,7 @@ impl InstallQueryOptions {
         "force": self.force,
         "quiet": self.quiet,
         "log_level": self.log_level.as_str(),
+        "inline": self.inline,
     })
     .as_object()
     .unwrap()

@@ -38,7 +38,7 @@ case "$INSTALL_LOG_LEVEL" in
       INSTALL_LOG_LEVEL=2
       _log ERROR "invalid log level: $INSTALL_LOG_LEVEL, using INFO"
 esac
-      
+
 
 
 _log() {
@@ -143,7 +143,10 @@ _urlget() {
   fi
 }
 {% if (assets | length  > 0) %}
-_urls=( {% for asset in assets %}{{ asset.url | escape_shell }} {% endfor %})
+_urls=( {% for asset in assets %}
+  {{ asset.url | escape_shell }}
+{%- endfor %}
+)
 _filenames=( {% for asset in assets %}{{ asset.name | escape_shell }} {% endfor %})
 _filetypes=( {% for asset in assets %}{{ asset.filetype | escape_shell }} {% endfor %})
 _printables=( {% for asset in assets %}{{ asset.name ~ " (" ~ asset.filetype ~ ")" | escape_shell }} {% endfor %})

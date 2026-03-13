@@ -159,20 +159,20 @@ Deliverable: ~~each module has one clear responsibility and smaller file size.~~
 Deliverable: ~~predictable module boundaries and ownership.~~ ✅ Completed.
 
 ## Phase 5 — Normalize template/infrastructure behavior
-1. Make template loading fail-fast and consistent (`Result` handling, no ignored add failures).
-2. Remove template content logging in production logs.
-3. Implement or remove unfinished PowerShell quote helper.
-4. Cache static page map once (`LazyLock`) instead of per-request rebuild.
+1. ~~Make template loading fail-fast and consistent (`Result` handling, no ignored add failures).~~ ✅ Completed.
+2. ~~Remove template content logging in production logs.~~ ✅ Completed.
+3. ~~Implement or remove unfinished PowerShell quote helper.~~ ✅ Completed (removed dead helper).
+4. ~~Cache static page map once (`LazyLock`) instead of per-request rebuild.~~ ✅ Completed.
 
-Deliverable: deterministic startup and cleaner operational behavior.
+Deliverable: ~~deterministic startup and cleaner operational behavior.~~ ✅ Completed for template/static-site scope.
 
 ## Phase 5.5 — Startup and security hardening
-1. Convert `main` startup path to return rich errors (`anyhow::Result<()>` or equivalent).
-2. Remove startup `unwrap` for env parsing/address parsing/bind/serve.
-3. Replace permissive CORS with explicit allowlist policy.
-4. Replace `print!` diagnostics in service code with structured logging.
+1. ~~Convert `main` startup path to return rich errors (`anyhow::Result<()>` or equivalent).~~ ✅ Completed.
+2. ~~Remove startup `unwrap` for env parsing/address parsing/bind/serve.~~ ✅ Completed.
+3. ~~Replace permissive CORS with explicit allowlist policy.~~ ✅ Completed.
+4. ~~Replace `print!` diagnostics in service code with structured logging.~~ ✅ Completed (no runtime service `print!` diagnostics remained).
 
-Deliverable: predictable startup behavior and explicit security posture.
+Deliverable: ~~predictable startup behavior and explicit security posture.~~ ✅ Completed for startup/CORS scope.
 
 ## Phase 6 — Test coverage and safety net
 1. Unit tests for platform/filetype identification edge cases.
@@ -188,14 +188,14 @@ Deliverable: regression resistance for future refactors.
 
 ## Concrete Cleanup Backlog
 - [x] ~~Replace all panic/unwrap in request-path code.~~
-- [ ] Replace startup/config `unwrap` calls with context-rich errors.
-- [ ] Remove dead/unfinished code (`todo!` in runtime paths).
+- [x] ~~Replace startup/config `unwrap` calls with context-rich errors.~~
+- [x] ~~Remove dead/unfinished code (`todo!` in runtime paths).~~
 - [x] ~~Consolidate duplicated install handler logic.~~
 - [x] ~~Split `app_downloader.rs` into cohesive modules.~~
 - [x] ~~Move `types.rs` HTTP/domain mix into dedicated modules.~~
 - [x] ~~Remove unused abstractions (`QueryOptions`, unused wrappers) or wire them properly.~~
-- [ ] Standardize logging (no large template dumps).
-- [ ] Restrict CORS policy to explicit origins/methods.
+- [x] ~~Standardize logging (no large template dumps).~~
+- [x] ~~Restrict CORS policy to explicit origins/methods.~~
 - [ ] Document module ownership in `README` or `ARCHITECTURE.md`.
 
 ---

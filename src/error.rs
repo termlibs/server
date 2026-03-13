@@ -44,7 +44,10 @@ impl AppError {
       AppError::InvalidInput(message) => message.clone(),
       AppError::UnsupportedApp(app) => format!("Unsupported app: {}", app),
       AppError::NoMatchingAssets { repo, target } => {
-        format!("No matching assets found for '{}' and target '{}'", repo, target)
+        format!(
+          "No matching assets found for '{}' and target '{}'",
+          repo, target
+        )
       }
       AppError::UpstreamGithub(message) => message.clone(),
       AppError::Template(message) => message.clone(),

@@ -1,11 +1,16 @@
 extern crate core;
 
+use anyhow::Context;
 use axum::{
-    extract::{Path, Query},
-    http::StatusCode,
-    response::{Html, IntoResponse},
-    routing::get,
-    Router,
+  extract::{Path, Query, Request},
+  http::{
+    header::{ACCEPT, CONTENT_TYPE},
+    HeaderMap, HeaderValue, Method, StatusCode, Uri,
+  },
+  middleware::{self, Next},
+  response::{Html, IntoResponse, Redirect},
+  routing::get,
+  Router,
 };
 use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
@@ -13,55 +18,58 @@ use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 mod domain;
 mod error;
-mod gh;
+mod providers;
 mod http;
+mod services;
 mod static_site;
 mod supported_apps;
 mod templates;
-mod services;
 
-use crate::error::AppError;
 use crate::domain::platform::{TargetArch, TargetOs};
-use crate::services::installer;
-use crate::templates::TEMPLATES;
+use crate::error::AppError;
 use crate::http::query::{InstallMethod, InstallQueryOptions};
 use crate::http::responses::ScriptResponse;
+use crate::services::installer;
+use crate::templates::TEMPLATES;
 use log::{debug, info, warn};
 use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use std::time::Instant;
 
+const LOG_REQUESTS_SKIP_PATHS: [&str; 1] = ["/favicon.ico"];
+const LATEST_API_PREFIX: &str = "/v1";
 const FAVICON: &[u8] = include_bytes!("../favicon.ico");
 static TERMLIBS_ROOT: LazyLock<PathBuf> =
-    LazyLock::new(|| PathBuf::from(env::var("TERMLIBS_ROOT").unwrap_or("../".into())));
+  LazyLock::new(|| PathBuf::from(env::var("TERMLIBS_ROOT").unwrap_or("../".into())));
 
 fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
-    let log_level = log_level.to_uppercase();
-    let level = match log_level.as_str() {
-        "DEBUG" => log::LevelFilter::Debug,
-        "INFO" => log::LevelFilter::Info,
-        "WARN" => log::LevelFilter::Warn,
-        "ERROR" => log::LevelFilter::Error,
-        _ => log::LevelFilter::Info,
-    };
-    fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "{} {}: {}",
-                chrono::Local::now().format("[%Y-%m-%d %H:%M:%S]"),
-                record.level(),
-                message
-            ));
-        })
-        .level(level)
-        .chain(std::io::stdout())
-        .apply()?;
-    warn!("Logging initialized at level {}", log_level);
-    Ok(())
+  let log_level = log_level.to_uppercase();
+  let level = match log_level.as_str() {
+    "DEBUG" => log::LevelFilter::Debug,
+    "INFO" => log::LevelFilter::Info,
+    "WARN" => log::LevelFilter::Warn,
+    "ERROR" => log::LevelFilter::Error,
+    _ => log::LevelFilter::Info,
+  };
+  fern::Dispatch::new()
+    .format(|out, message, record| {
+      out.finish(format_args!(
+        "{} {}: {}",
+        chrono::Local::now().format("[%Y-%m-%d %H:%M:%S]"),
+        record.level(),
+        message
+      ));
+    })
+    .level(level)
+    .chain(std::io::stdout())
+    .apply()?;
+  warn!("Logging initialized at level {}", log_level);
+  Ok(())
 }
 
 async fn favicon() -> impl IntoResponse {
-    (StatusCode::OK, [("Content-Type", "image/x-icon")], FAVICON)
+  (StatusCode::OK, [("Content-Type", "image/x-icon")], FAVICON)
 }
 
 #[utoipa::path(
@@ -69,7 +77,8 @@ async fn favicon() -> impl IntoResponse {
   path = "/install/{user}/{repo}",
   params(
     ("user" = String, Path, description = "GitHub username"),
-    ("repo" = String, Path, description = "GitHub repository name")
+    ("repo" = String, Path, description = "GitHub repository name"),
+    ("inline" = Option<bool>, Query, description = "Return script as browser-friendly plain text when true", nullable)
   ),
   responses(
     (status = 200, description = "Install script (bash)for arbitrary GitHub repository", body = ScriptResponse, content_type = "application/x-sh"),
@@ -78,14 +87,15 @@ async fn favicon() -> impl IntoResponse {
   tag = "install"
 )]
 async fn install_arbitrary_github_handler(
-    Path((user, repo)): Path<(String, String)>,
-    Query(mut q): Query<InstallQueryOptions>,
+  Path((user, repo)): Path<(String, String)>,
+  Query(mut q): Query<InstallQueryOptions>,
+  headers: HeaderMap,
 ) -> Result<ScriptResponse, AppError> {
-    debug!(
-        "install_arbitrary_github_handler({:?}, {:?}) with {:#?}",
-        user, repo, q
-    );
-    installer::build_arbitrary_github_install_script(&user, &repo, &mut q).await
+  debug!(
+    "install_arbitrary_github_handler({:?}, {:?}) with {:#?}",
+    user, repo, q
+  );
+  installer::build_arbitrary_github_install_script(&user, &repo, &mut q, accepts_html(&headers)).await
 }
 
 #[utoipa::path(
@@ -96,7 +106,8 @@ async fn install_arbitrary_github_handler(
     ("os" = Option<String>, Query, description = "target os"),
     ("arch" = Option<String>, Query, description = "target architecture", nullable),
     ("prefix" = Option<String>, Query, description = "install directory", nullable),
-    ("version" = Option<String>, Query, description = "app version, default is latest", nullable)
+    ("version" = Option<String>, Query, description = "app version, default is latest", nullable),
+    ("inline" = Option<bool>, Query, description = "Return script as browser-friendly plain text when true", nullable)
   ),
   responses(
     (status = 200, description = "Install script (bash) for the application", body = ScriptResponse, content_type = "application/x-sh"),
@@ -105,25 +116,78 @@ async fn install_arbitrary_github_handler(
   tag = "install"
 )]
 async fn install_handler(
-    Path(app): Path<String>,
-    Query(mut q): Query<InstallQueryOptions>,
+  Path(app): Path<String>,
+  Query(mut q): Query<InstallQueryOptions>,
+  headers: HeaderMap,
 ) -> Result<ScriptResponse, AppError> {
-    debug!("install_handler({:?}, {:?})", app, q);
-    installer::build_supported_install_script(&app, &mut q).await
+  debug!("install_handler({:?}, {:?})", app, q);
+  installer::build_supported_install_script(&app, &mut q, accepts_html(&headers)).await
+}
+
+async fn install_latest_redirect(uri: Uri) -> Redirect {
+  let path_and_query = uri.path_and_query().map(|v| v.as_str()).unwrap_or(uri.path());
+  Redirect::temporary(&format!("{LATEST_API_PREFIX}{path_and_query}"))
+}
+
+fn accepts_html(headers: &HeaderMap) -> bool {
+  headers
+    .get(ACCEPT)
+    .and_then(|v| v.to_str().ok())
+    .map(|v| v.contains("text/html"))
+    .unwrap_or(false)
 }
 
 async fn root_handler() -> impl IntoResponse {
-    info!("{:?}", "root");
-    info!("{:?}", TERMLIBS_ROOT);
-    let html = static_site::load_static("index.html").unwrap_or("".to_string());
-    Html(html)
+  info!("{:?}", "root");
+  info!("{:?}", TERMLIBS_ROOT);
+  let html = static_site::load_static("index.html").unwrap_or("".to_string());
+  Html(html)
+}
+
+async fn not_found_handler() -> impl IntoResponse {
+  let html =
+    static_site::load_static("404.html").unwrap_or("<h1>404 Not Found</h1>".to_string());
+  (StatusCode::NOT_FOUND, Html(html))
+}
+
+fn is_truthy_env(name: &str) -> bool {
+  env::var(name)
+    .ok()
+    .map(|value| value.trim().to_ascii_lowercase())
+    .map(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"))
+    .unwrap_or(false)
+}
+
+async fn log_requests_middleware(request: Request, next: Next) -> impl IntoResponse {
+  let method = request.method().clone();
+  let uri = request.uri().clone();
+  if LOG_REQUESTS_SKIP_PATHS.contains(&uri.path()) {
+    return next.run(request).await;
+  }
+  debug!(
+    "{} {} -> (received)",
+    method,
+    uri,
+  );
+  let started = Instant::now();
+  let response = next.run(request).await;
+  let status = response.status();
+  let elapsed = started.elapsed();
+  debug!(
+    "{} {} -> {} (completed in {} ms)",
+    method,
+    uri,
+    status.as_u16(),
+    elapsed.as_millis()
+  );
+  response
 }
 
 #[derive(OpenApi)]
 #[openapi(
   info(
     title = "Termlibs API",
-    version = "0.3.0",
+    version = "0.4.0",
     description = "Terminal library installer API - Generate install scripts for popular CLI tools",
     contact(
       name = "Termlibs",
@@ -149,69 +213,124 @@ async fn root_handler() -> impl IntoResponse {
 struct ApiDoc;
 
 #[tokio::main]
-async fn main() {
-    // make sure the templates are loaded early to check for errors
-    let _ = TEMPLATES.get_template_names().map(|name| {
-        info!("template loaded: {}", name);
-    });
+async fn main() -> anyhow::Result<()> {
+  // make sure the templates are loaded early to check for errors
+  TEMPLATES.get_template_names().for_each(|name| {
+    info!("template loaded: {}", name);
+  });
 
-    let port = env::var("PORT")
-        .unwrap_or("8080".to_string())
-        .parse::<u16>()
-        .unwrap();
-    let log_level = env::var("LOG_LEVEL").unwrap_or("DEBUG".to_string());
-    let listen_ip: String = env::var("LISTEN").unwrap_or("0.0.0.0".to_string());
+  let port = env::var("PORT")
+    .unwrap_or("8080".to_string())
+    .parse::<u16>()
+    .with_context(|| "invalid PORT value; expected u16".to_string())?;
+  let log_level = env::var("LOG_LEVEL").unwrap_or("DEBUG".to_string());
+  let listen_ip: String = env::var("LISTEN").unwrap_or("0.0.0.0".to_string());
 
-    setup_logger(log_level.as_str()).unwrap_or(());
+  setup_logger(log_level.as_str()).context("failed to initialize logger")?;
 
-    info!("starting server at {:?}:{}", listen_ip, port);
+  info!("starting server at {:?}:{}", listen_ip, port);
 
-    let app = build_app();
+  let app = build_app()?;
 
-    let addr = format!("{}:{}", listen_ip, port)
-        .parse::<SocketAddr>()
-        .unwrap();
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+  let addr = format!("{}:{}", listen_ip, port)
+    .parse::<SocketAddr>()
+    .with_context(|| format!("invalid listen address: {}:{}", listen_ip, port))?;
+  let listener = tokio::net::TcpListener::bind(addr)
+    .await
+    .context("failed to bind TCP listener")?;
 
-    axum::serve(listener, app).await.unwrap();
+  axum::serve(listener, app)
+    .await
+    .context("axum server exited with error")?;
+  Ok(())
 }
 
-fn build_app() -> Router {
-    let v1_router = Router::new()
-        .route("/install/{user}/{repo}", get(install_arbitrary_github_handler))
-        .route("/install/{app}", get(install_handler));
+fn build_cors_layer() -> anyhow::Result<CorsLayer> {
+  let raw_origins = env::var("CORS_ALLOWED_ORIGINS")
+    .unwrap_or_else(|_| "http://localhost:8000,https://termlibs.dev".to_string());
+  let origins: Vec<HeaderValue> = raw_origins
+    .split(',')
+    .map(str::trim)
+    .filter(|s| !s.is_empty())
+    .map(|s| HeaderValue::from_str(s).with_context(|| format!("invalid CORS origin: {}", s)))
+    .collect::<Result<_, _>>()?;
 
-    Router::new()
-        .route("/", get(root_handler))
-        .route("/favicon.ico", get(favicon))
-        .nest("/v1", v1_router)
-        .merge(SwaggerUi::new("/swagger-ui").url("/openapi.json", ApiDoc::openapi()))
-        .layer(CorsLayer::permissive())
+  Ok(
+    CorsLayer::new()
+      .allow_methods([Method::GET])
+      .allow_headers([ACCEPT, CONTENT_TYPE])
+      .allow_origin(origins),
+  )
+}
+
+fn build_app() -> anyhow::Result<Router> {
+  let cors = build_cors_layer()?;
+  let v1_router = Router::new()
+    .route(
+      "/install/{user}/{repo}",
+      get(install_arbitrary_github_handler),
+    )
+    .route("/install/{app}", get(install_handler));
+
+  let mut app = Router::new()
+    .route("/", get(root_handler))
+    .route("/install", get(install_latest_redirect))
+    .route("/install/{app}", get(install_latest_redirect))
+    .route("/install/{user}/{repo}", get(install_latest_redirect))
+    .route("/favicon.ico", get(favicon))
+    .nest("/v1", v1_router)
+    .merge(SwaggerUi::new("/swagger-ui").url("/openapi.json", ApiDoc::openapi()))
+    .fallback(not_found_handler)
+    .layer(cors);
+
+  if is_truthy_env("LOG_REQUESTS") {
+    debug!("request logging middleware enabled via LOG_REQUESTS");
+    app = app.layer(middleware::from_fn(log_requests_middleware));
+  }
+
+  Ok(app)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use axum_test::TestServer;
+  use super::*;
+  use axum_test::TestServer;
 
-    async fn test_server() -> TestServer {
-        let app = build_app();
-        TestServer::new(app).unwrap()
-    }
+  async fn test_server() -> TestServer {
+    let app = build_app().unwrap();
+    TestServer::new(app).unwrap()
+  }
 
-    #[tokio::test]
-    async fn test_favicon() {
-        let server = test_server().await;
-        let response = server.get("/favicon.ico").await;
-        response.assert_status_ok();
-        response.assert_header("Content-Type", "image/x-icon");
-    }
+  #[tokio::test]
+  async fn test_favicon() {
+    let server = test_server().await;
+    let response = server.get("/favicon.ico").await;
+    response.assert_status_ok();
+    response.assert_header("Content-Type", "image/x-icon");
+  }
 
-    #[tokio::test]
-    async fn test_install_yutc() {
-        let server = test_server().await;
-        let response = server.get("/v1/install/yutc").await;
-        response.assert_status_ok();
-        response.assert_header("Content-Type", "application/x-sh");
-    }
+  #[tokio::test]
+  async fn test_install_yutc() {
+    let server = test_server().await;
+    let response = server.get("/v1/install/yutc").await;
+    response.assert_status_ok();
+    response.assert_header("Content-Type", "application/x-sh");
+  }
+
+  #[tokio::test]
+  async fn test_install_latest_redirects_to_v1_with_query() {
+    let server = test_server().await;
+    let response = server.get("/install/yutc?arch=amd64").await;
+    response.assert_status(StatusCode::TEMPORARY_REDIRECT);
+    response.assert_header("Location", "/v1/install/yutc?arch=amd64");
+  }
+
+  #[tokio::test]
+  async fn test_not_found_html_page() {
+    let server = test_server().await;
+    let response = server.get("/definitely-not-real").await;
+    response.assert_status(StatusCode::NOT_FOUND);
+    response.assert_header("Content-Type", "text/html; charset=utf-8");
+    response.assert_text_contains("404 not found ya doink");
+  }
 }

@@ -8,11 +8,15 @@ use tera::{Filter, Tera};
 pub(crate) static TEMPLATES: LazyLock<Tera> = LazyLock::new(|| {
   let mut tera = Tera::default();
   let (install_sh, content) = ("install.sh", include_str!("../templates/install.sh"));
-  info!("Adding template {}", install_sh); // TODO()
-  info!("Content: {}", content);
-  let _ = tera.add_raw_template(install_sh, content).unwrap();
+  info!("adding template {}", install_sh);
+  tera
+    .add_raw_template(install_sh, content)
+    .unwrap_or_else(|e| panic!("failed to add {} template: {}", install_sh, e));
   let (install_ps1, content) = ("install.ps1", include_str!("../templates/install.ps1"));
-    let _ = tera.add_raw_template(install_ps1, content);
+  info!("adding template {}", install_ps1);
+  tera
+    .add_raw_template(install_ps1, content)
+    .unwrap_or_else(|e| panic!("failed to add {} template: {}", install_ps1, e));
   tera.register_filter("escape_shell", ShellEscape);
   tera.register_filter("enumerate", Enumerate);
   tera
@@ -21,8 +25,7 @@ pub(crate) static TEMPLATES: LazyLock<Tera> = LazyLock::new(|| {
 struct ShellEscape;
 
 impl Filter for ShellEscape {
-  fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> tera::Result<Value> {
-    // todo handle more than just strings
+  fn filter(&self, value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
     if let Some(to_escape) = value.as_str() {
       let escaped: Vec<u8> = Bash::quote(to_escape);
       Ok(Value::String(String::from_utf8(escaped).unwrap()))
@@ -35,7 +38,7 @@ impl Filter for ShellEscape {
 struct Enumerate;
 
 impl Filter for Enumerate {
-  fn filter(&self, value: &Value, args: &HashMap<String, Value>) -> tera::Result<Value> {
+  fn filter(&self, value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
     if let Some(list) = value.as_array() {
       let mut result: Vec<Value> = Vec::with_capacity(list.len());
       for (i, item) in list.iter().enumerate() {
@@ -48,14 +51,6 @@ impl Filter for Enumerate {
     } else {
       Ok(Value::Array(Vec::new()))
     }
-  }
-}
-
-struct Powershell;
-
-impl Powershell {
-  fn quote(&self, to_escape: &str) -> Vec<u8> {
-    todo!()
   }
 }
 
