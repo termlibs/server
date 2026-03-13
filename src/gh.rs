@@ -6,7 +6,7 @@ use octocrab::models::repos::Release;
 
 const MIN_ASSET_SIZE: u64 = 64 * 1024; // arbitrary, may need to change if we start installing scripts
 
-pub async fn get_github_download_links(
+pub(crate) async fn get_github_download_links(
     repo: &Repo,
     target_deployment: &TargetDeployment,
     version: &str,

@@ -2,11 +2,11 @@ use crate::domain::platform::TargetOs;
 use crate::error::AppError;
 use crate::supported_apps::DownloadInfo;
 use crate::templates::TEMPLATES;
-use crate::types::InstallQueryOptions;
+use crate::http::query::InstallQueryOptions;
 use serde_json::Value;
 use tera::Context;
 
-pub fn render_install_script(
+pub(crate) fn render_install_script(
     query: &InstallQueryOptions,
     links: &[DownloadInfo],
     os: &TargetOs,

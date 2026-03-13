@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 use tera::{Filter, Tera};
 
-pub static TEMPLATES: LazyLock<Tera> = LazyLock::new(|| {
+pub(crate) static TEMPLATES: LazyLock<Tera> = LazyLock::new(|| {
   let mut tera = Tera::default();
   let (install_sh, content) = ("install.sh", include_str!("../templates/install.sh"));
   info!("Adding template {}", install_sh); // TODO()

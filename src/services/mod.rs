@@ -1,2 +1,2 @@
-pub mod installer;
-pub mod templating;
+pub(crate) mod installer;
+pub(crate) mod templating;

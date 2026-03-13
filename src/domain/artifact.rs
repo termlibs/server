@@ -18,7 +18,7 @@ fn get_extensions(filename: &str) -> Vec<String> {
 }
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
-pub enum ArchiveType {
+pub(crate) enum ArchiveType {
     Tar,
     TarGz,
     TarBz2,
@@ -84,7 +84,7 @@ impl ArchiveType {
 }
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
-pub enum InstallerType {
+pub(crate) enum InstallerType {
     Msi,
     Exe,
     Deb,
@@ -122,7 +122,7 @@ impl Display for InstallerType {
 }
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
-pub enum ScriptType {
+pub(crate) enum ScriptType {
     Bat,
     Sh,
     Ps1,
@@ -160,7 +160,7 @@ impl Display for ScriptType {
 }
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
-pub enum Filetype {
+pub(crate) enum Filetype {
     Binary,
     Script(ScriptType),
     Installer(InstallerType),

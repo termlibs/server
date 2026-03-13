@@ -37,7 +37,7 @@ macro_rules! impl_caseless_deserialize {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, ToSchema)]
-pub enum TargetOs {
+pub(crate) enum TargetOs {
     Windows,
     Linux,
     Mac,
@@ -213,7 +213,7 @@ impl TargetArch {
 }
 
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub struct TargetDeployment {
+pub(crate) struct TargetDeployment {
     pub(crate) os: TargetOs,
     pub(crate) arch: TargetArch,
 }
@@ -225,7 +225,7 @@ impl Display for TargetDeployment {
 }
 
 impl TargetDeployment {
-    pub fn new(os: TargetOs, arch: TargetArch) -> TargetDeployment {
+    pub(crate) fn new(os: TargetOs, arch: TargetArch) -> TargetDeployment {
         TargetDeployment { os, arch }
     }
 

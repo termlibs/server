@@ -1,3 +1,3 @@
-pub mod artifact;
-pub mod download;
-pub mod platform;
+pub(crate) mod artifact;
+pub(crate) mod download;
+pub(crate) mod platform;

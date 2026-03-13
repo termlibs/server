@@ -11,19 +11,19 @@ use url::Url;
 
 const GITHUB_API: &str = "https://api.github.com";
 
-pub fn get_app(name: &str) -> Option<SupportedApp> {
+pub(crate) fn get_app(name: &str) -> Option<SupportedApp> {
     SUPPORTED_APPS.get(name).cloned()
 }
 
 #[derive(Debug, Clone)]
-pub struct SupportedApp {
-    pub shortname: String,
-    pub repo: Repo,
-    pub source: String,
+pub(crate) struct SupportedApp {
+    pub(crate) shortname: String,
+    pub(crate) repo: Repo,
+    pub(crate) source: String,
 }
 
 impl SupportedApp {
-    pub fn new(shortname: &str, repo: Repo, source: &str) -> Self {
+    pub(crate) fn new(shortname: &str, repo: Repo, source: &str) -> Self {
         Self {
             shortname: shortname.to_string(),
             repo,
@@ -32,7 +32,7 @@ impl SupportedApp {
     }
 }
 
-pub static SUPPORTED_APPS: LazyLock<HashMap<&str, SupportedApp>> = LazyLock::new(|| {
+static SUPPORTED_APPS: LazyLock<HashMap<&str, SupportedApp>> = LazyLock::new(|| {
     let mut map = HashMap::new();
     for (app, github_url) in [
         ("yq", "mikefarah/yq"),
@@ -52,7 +52,7 @@ pub static SUPPORTED_APPS: LazyLock<HashMap<&str, SupportedApp>> = LazyLock::new
 });
 
 #[derive(Debug, Clone, PartialOrd, PartialEq)]
-pub enum Repo {
+pub(crate) enum Repo {
     Github(String),
     Url(String),
     Python(String),
@@ -84,7 +84,7 @@ impl Repo {
         Ok(self.get_url()?.path().trim_start_matches("/repos/").to_string())
     }
 
-    pub async fn get_download_link(
+    pub(crate) async fn get_download_link(
         &self,
         version: &str,
         target_deployment: &TargetDeployment,
@@ -104,12 +104,12 @@ impl Repo {
 }
 
 #[derive(Debug)]
-pub struct DownloadInfo {
-    pub name: String,
-    pub label: String,
-    pub url: Url,
-    pub content_type: Mime,
-    pub size: u64,
+pub(crate) struct DownloadInfo {
+    pub(crate) name: String,
+    pub(crate) label: String,
+    pub(crate) url: Url,
+    pub(crate) content_type: Mime,
+    pub(crate) size: u64,
     pub(crate) target: Target,
 }
 
@@ -129,7 +129,7 @@ impl DownloadInfo {
         }
     }
 
-    pub fn json(&self) -> serde_json::Value {
+    pub(crate) fn json(&self) -> serde_json::Value {
         json!({
             "name": self.name,
             "label": self.label,

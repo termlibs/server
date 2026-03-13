@@ -4,10 +4,11 @@ use crate::gh::get_github_download_links;
 use crate::services::templating;
 use crate::supported_apps;
 use crate::supported_apps::{DownloadInfo, Repo, SupportedApp};
-use crate::types::{InstallQueryOptions, ScriptResponse};
+use crate::http::query::InstallQueryOptions;
+use crate::http::responses::ScriptResponse;
 use log::debug;
 
-pub async fn build_supported_install_script(
+pub(crate) async fn build_supported_install_script(
     app: &str,
     query: &mut InstallQueryOptions,
 ) -> Result<ScriptResponse, AppError> {
@@ -25,7 +26,7 @@ pub async fn build_supported_install_script(
     ))
 }
 
-pub async fn build_arbitrary_github_install_script(
+pub(crate) async fn build_arbitrary_github_install_script(
     user: &str,
     repo: &str,
     query: &mut InstallQueryOptions,
@@ -40,7 +41,7 @@ pub async fn build_arbitrary_github_install_script(
     Ok(ScriptResponse::new(format!("install.{}", extension), script))
 }
 
-pub async fn load_app(
+pub(crate) async fn load_app(
     query: &InstallQueryOptions,
     supported_app: &SupportedApp,
 ) -> Result<(TargetDeployment, Vec<DownloadInfo>), AppError> {

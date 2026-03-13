@@ -152,11 +152,11 @@ Deliverable: ~~handlers become thin adapters with minimal branching.~~ ✅ Compl
 Deliverable: ~~each module has one clear responsibility and smaller file size.~~ ✅ Completed for Phase 3 scope.
 
 ## Phase 4 — Clarify API surface and ownership
-1. Move HTTP-specific structs out of `types.rs` into `http/`.
-2. Keep domain types in `domain/` only (no mixed re-exports).
-3. Tighten visibility (`pub(crate)`/private) to reduce accidental coupling.
+1. ~~Move HTTP-specific structs out of `types.rs` into `http/`.~~ ✅ Completed.
+2. ~~Keep domain types in `domain/` only (no mixed re-exports).~~ ✅ Completed.
+3. ~~Tighten visibility (`pub(crate)`/private) to reduce accidental coupling.~~ ✅ Completed.
 
-Deliverable: predictable module boundaries and ownership.
+Deliverable: ~~predictable module boundaries and ownership.~~ ✅ Completed.
 
 ## Phase 5 — Normalize template/infrastructure behavior
 1. Make template loading fail-fast and consistent (`Result` handling, no ignored add failures).
@@ -192,7 +192,7 @@ Deliverable: regression resistance for future refactors.
 - [ ] Remove dead/unfinished code (`todo!` in runtime paths).
 - [x] ~~Consolidate duplicated install handler logic.~~
 - [x] ~~Split `app_downloader.rs` into cohesive modules.~~
-- [ ] Move `types.rs` HTTP/domain mix into dedicated modules.
+- [x] ~~Move `types.rs` HTTP/domain mix into dedicated modules.~~
 - [x] ~~Remove unused abstractions (`QueryOptions`, unused wrappers) or wire them properly.~~
 - [ ] Standardize logging (no large template dumps).
 - [ ] Restrict CORS policy to explicit origins/methods.

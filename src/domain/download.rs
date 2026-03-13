@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, ToSchema)]
-pub struct Target {
-    pub deployment: TargetDeployment,
-    pub filetype: Filetype,
+pub(crate) struct Target {
+    pub(crate) deployment: TargetDeployment,
+    pub(crate) filetype: Filetype,
 }
 
 impl Target {
@@ -18,7 +18,7 @@ impl Target {
         }
     }
 
-    pub fn new(os: TargetOs, arch: TargetArch, filetype: Filetype) -> Target {
+    pub(crate) fn new(os: TargetOs, arch: TargetArch, filetype: Filetype) -> Target {
         Target {
             deployment: TargetDeployment { os, arch },
             filetype,

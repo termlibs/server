@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 
 #[derive(Debug)]
-pub enum AppError {
+pub(crate) enum AppError {
   InvalidInput(String),
   UnsupportedApp(String),
   NoMatchingAssets { repo: String, target: String },
