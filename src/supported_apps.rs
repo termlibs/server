@@ -1,10 +1,11 @@
 use crate::app_downloader::{Target, TargetDeployment};
-use crate::gh::{get_github_download_links};
+use crate::error::AppError;
+use crate::gh::get_github_download_links;
+use mime::Mime;
+use serde_json::json;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::LazyLock;
-use mime::Mime;
-use serde_json::json;
 use url::Url;
 
 const GITHUB_API: &str = "https://api.github.com";
@@ -19,6 +20,7 @@ pub struct SupportedApp {
     pub repo: Repo,
     pub source: String,
 }
+
 impl SupportedApp {
     pub fn new(shortname: &str, repo: Repo, source: &str) -> Self {
         Self {
@@ -41,12 +43,9 @@ pub static SUPPORTED_APPS: LazyLock<HashMap<&str, SupportedApp>> = LazyLock::new
         ("yutc", "adam-huganir/yutc"),
         ("kubectl", "kubernetes/kubectl"),
         ("helm", "helm/helm"),
-        ("uv", "astral-sh/uv")
+        ("uv", "astral-sh/uv"),
     ] {
-        let _ = map.insert(
-            app,
-            SupportedApp::new(app, Repo::github(github_url), "github"),
-        );
+        let _ = map.insert(app, SupportedApp::new(app, Repo::github(github_url), "github"));
     }
     map
 });
@@ -57,7 +56,6 @@ pub enum Repo {
     Url(String),
     Python(String),
 }
-
 
 impl Repo {
     pub(crate) fn github(repo: &str) -> Self {
@@ -72,26 +70,36 @@ impl Repo {
         Self::Python(format!("https://pypi.org/simple/{}", app))
     }
 
-    fn get_url(&self) -> Url {
+    fn get_url(&self) -> Result<Url, AppError> {
+        let parsed = match self {
+            Repo::Github(repo) => Url::parse(repo),
+            Repo::Url(url) => Url::parse(url),
+            Repo::Python(url) => Url::parse(url),
+        };
+        parsed.map_err(|err| AppError::InvalidInput(format!("Invalid repo URL: {}", err)))
+    }
+
+    pub(crate) fn get_github_repo(&self) -> Result<String, AppError> {
+        Ok(self.get_url()?.path().trim_start_matches("/repos/").to_string())
+    }
+
+    pub async fn get_download_link(
+        &self,
+        version: &str,
+        target_deployment: &TargetDeployment,
+    ) -> Result<Vec<DownloadInfo>, AppError> {
         match self {
-            Repo::Github(repo) => Url::parse(repo).unwrap(),
-            Repo::Url(url) => Url::parse(url).unwrap(),
-            Repo::Python(url) => Url::parse(url).unwrap(),
+            Repo::Github(_) => get_github_download_links(self, target_deployment, version).await,
+            Repo::Url(url) => Err(AppError::InvalidInput(format!(
+                "{} is not a github repo",
+                url
+            ))),
+            Repo::Python(url) => Err(AppError::InvalidInput(format!(
+                "{} is not a github repo",
+                url
+            ))),
         }
     }
-
-    pub(crate) fn get_github_repo(&self) -> String {
-        self.get_url().path().trim_start_matches("/repos/").to_string()
-    }
-
-    pub async fn  get_download_link(&self, version: &str, target_deployment: &TargetDeployment) -> Vec<DownloadInfo> {
-        match self {
-            Repo::Github(_) => get_github_download_links(&self, target_deployment, version).await.unwrap(),
-            Repo::Url(url) => panic!("{} is not a github repo", url),
-            Repo::Python(url) => panic!("{} is not a github repo", url),
-        }
-    }
-
 }
 
 #[derive(Debug)]
@@ -105,23 +113,21 @@ pub struct DownloadInfo {
 }
 
 impl DownloadInfo {
-
     pub(crate) fn from_asset(asset: &octocrab::models::repos::Asset) -> Self {
-        let mime = asset.content_type.parse::<Mime>().unwrap();
+        let mime = asset
+            .content_type
+            .parse::<Mime>()
+            .unwrap_or(mime::APPLICATION_OCTET_STREAM);
         Self {
             name: asset.name.clone(),
             label: asset.label.to_owned().unwrap_or("".to_string()),
             url: asset.browser_download_url.clone(),
             content_type: mime.to_owned(),
             size: asset.size as u64,
-            target: Target::identify(
-                &asset.name,
-                Some(&mime),
-                
-            ),
+            target: Target::identify(&asset.name, Some(&mime)),
         }
     }
-    
+
     pub fn json(&self) -> serde_json::Value {
         json!({
             "name": self.name,

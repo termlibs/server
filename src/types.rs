@@ -1,5 +1,4 @@
 pub(crate) use crate::app_downloader::{TargetArch, TargetOs};
-use crate::supported_apps::Repo;
 use axum::body::Body;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -7,10 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::fmt::Display;
 use utoipa::{IntoParams, ToSchema};
-
-pub(crate) trait QueryOptions {
-  fn to_args(&self) -> String;
-}
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, ToSchema)]
 pub enum InstallMethod {
@@ -103,7 +98,7 @@ impl InstallQueryOptions {
 
   pub fn template_globals(&self) -> Map<String, Value> {
     json!({
-        "app": self.app.clone(),
+        "app": self.app.as_deref().unwrap_or(""),
         "version": self.version.as_str(),
         "prefix": self.prefix.as_str(),
         "arch": self.arch.to_string(),
@@ -121,28 +116,6 @@ impl InstallQueryOptions {
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
-pub struct StringList {
-  links: Vec<String>,
-}
-
-impl StringList {
-  pub fn new(links: Vec<String>) -> StringList {
-    StringList { links }
-  }
-}
-
-impl IntoResponse for StringList {
-  fn into_response(self) -> Response {
-    let body = Body::from(serde_json::to_vec_pretty(&self.links).unwrap());
-    Response::builder()
-      .status(StatusCode::OK)
-      .header("Content-Type", "application/json")
-      .body(body)
-      .unwrap()
-  }
-}
-
-#[derive(Serialize, Deserialize, ToSchema)]
 pub struct ScriptResponse {
   filename: String,
   #[serde(skip)]
@@ -150,12 +123,6 @@ pub struct ScriptResponse {
   #[serde(skip)]
   shell_name: String,
   body_size: usize,
-}
-
-impl QueryOptions for InstallQueryOptions {
-  fn to_args(&self) -> String {
-    "".to_ascii_lowercase()
-  }
 }
 
 impl ScriptResponse {
