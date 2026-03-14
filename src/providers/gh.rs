@@ -3,15 +3,17 @@ use crate::error::AppError;
 use crate::supported_apps::{DownloadInfo, Repo};
 use log::debug;
 use octocrab::models::repos::Release;
+use octocrab::OctocrabBuilder;
 
 const MIN_ASSET_SIZE: u64 = 64 * 1024; // arbitrary, may need to change if we start installing scripts
+
 
 pub(crate) async fn get_github_download_links(
   repo: &Repo,
   target_deployment: &TargetDeployment,
   version: &str,
 ) -> Result<Vec<DownloadInfo>, AppError> {
-  let octocrab = octocrab::instance();
+  let octocrab = OctocrabBuilder::default().build().map_err(AppError::from)?;
   let repo_string = repo.get_github_repo()?;
   let (owner, repo_name) = repo_string
     .split_once('/')
@@ -141,21 +143,186 @@ fn calc_all_widths(download_infos: &Vec<DownloadInfo>) -> (usize, usize, usize, 
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::domain::platform::{TargetArch, TargetOs};
   use crate::supported_apps::Repo;
+  use reqwest::Client;
+  use serde_json::Value;
+  use std::sync::{LazyLock, Mutex, MutexGuard};
+  use std::time::Duration;
+  use tokio::time::sleep;
+
+  static API_SANITY_TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+  fn lock_api_sanity_tests() -> MutexGuard<'static, ()> {
+    API_SANITY_TEST_LOCK
+      .lock()
+      .unwrap_or_else(|poisoned| poisoned.into_inner())
+  }
+
+  fn is_transient_github_error(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("rate limit")
+      || message.contains("service unavailable")
+      || message.contains("bad gateway")
+      || message.contains("timeout")
+  }
 
   #[tokio::test]
-  async fn base_test() {
-    let deployment = TargetDeployment::default();
-    for repo in [
-      Repo::github("adam-huganir/yutc"),
-      Repo::github("cli/cli"),
-      Repo::github("google/go-jsonnet"),
-      Repo::github("jqlang/jq"),
-      Repo::github("koalaman/shellcheck"),
-      Repo::github("mikefarah/yq"),
-      Repo::github("mvdan/sh"),
+  async fn sanity_known_github_apps_latest_release_lookup() {
+    let _guard = lock_api_sanity_tests();
+    for (repo, deployment) in [
+      (
+        Repo::github("adam-huganir/yutc"),
+        TargetDeployment::new(TargetOs::Linux, TargetArch::Amd64),
+      ),
+      (
+        Repo::github("cli/cli"),
+        TargetDeployment::new(TargetOs::Linux, TargetArch::Amd64),
+      ),
+      (
+        Repo::github("google/go-jsonnet"),
+        TargetDeployment::new(TargetOs::Linux, TargetArch::Amd64),
+      ),
+      (
+        Repo::github("jqlang/jq"),
+        TargetDeployment::new(TargetOs::Linux, TargetArch::Amd64),
+      ),
+      (
+        Repo::github("koalaman/shellcheck"),
+        TargetDeployment::new(TargetOs::Linux, TargetArch::Amd64),
+      ),
+      (
+        Repo::github("mikefarah/yq"),
+        TargetDeployment::new(TargetOs::Linux, TargetArch::Amd64),
+      ),
+      (
+        Repo::github("mvdan/sh"),
+        TargetDeployment::new(TargetOs::Mac, TargetArch::Amd64),
+      ),
     ] {
-      let _ = get_github_download_links(&repo, &deployment, "latest").await;
+      let links = {
+        let mut links = None;
+        let mut last_error: Option<AppError> = None;
+        for attempt in 1..=3 {
+          match get_github_download_links(&repo, &deployment, "latest").await {
+            Ok(found_links) => {
+              links = Some(found_links);
+              break;
+            }
+            Err(AppError::UpstreamGithub(message))
+              if attempt < 3 && is_transient_github_error(&message) =>
+            {
+              eprintln!(
+                "transient github error on attempt {}/3 for '{}': {}. retrying...",
+                attempt,
+                repo.get_github_repo().unwrap_or_else(|_| "<unknown>".to_string()),
+                message
+              );
+              sleep(Duration::from_secs(2)).await;
+            }
+            Err(err) => {
+              last_error = Some(err);
+              break;
+            }
+          }
+        }
+        match links {
+          Some(links) => links,
+          None => {
+            let err = last_error.unwrap_or_else(|| {
+              AppError::UpstreamGithub("retries exhausted without result".to_string())
+            });
+            panic!("known app config should resolve latest release lookup: {:?}", err);
+          }
+        }
+      };
+      assert!(
+        !links.is_empty(),
+        "known app '{}' should have at least one matching asset in latest release for deployment {}",
+        repo.get_github_repo().unwrap_or_else(|_| "<unknown>".to_string()),
+        deployment
+      );
     }
+  }
+
+  #[tokio::test]
+  async fn sanity_jq_release_tag_structure() -> Result<(), AppError> {
+    let _guard = lock_api_sanity_tests();
+    let octocrab = OctocrabBuilder::default().build().map_err(AppError::from)?;
+    let release = {
+      let mut release = None;
+      let mut last_error = String::new();
+      for attempt in 1..=3 {
+        match octocrab.repos("jqlang", "jq").releases().get_latest().await {
+          Ok(found_release) => {
+            release = Some(found_release);
+            break;
+          }
+          Err(err) => {
+            let message = err.to_string();
+            if attempt < 3 && is_transient_github_error(&message) {
+              eprintln!(
+                "transient github error on attempt {}/3 for jq release check: {}. retrying...",
+                attempt, message
+              );
+              last_error = message;
+              sleep(Duration::from_secs(2)).await;
+              continue;
+            }
+            panic!("jq release tag sanity test failed: {}", err);
+          }
+        }
+      }
+      release.unwrap_or_else(|| {
+        panic!(
+          "jq release tag sanity test failed after retries: {}",
+          last_error
+        )
+      })
+    };
+    assert!(
+      release.tag_name.starts_with("jq-"),
+      "expected jq tag to start with 'jq-', got '{}'",
+      release.tag_name
+    );
+    Ok(())
+  }
+
+  #[tokio::test]
+  async fn sanity_terraform_url_exists() {
+    let _guard = lock_api_sanity_tests();
+    let client = Client::new();
+    let checkpoint = client
+      .get("https://checkpoint-api.hashicorp.com/v1/check/terraform")
+      .send()
+      .await
+      .expect("failed to fetch terraform checkpoint metadata");
+    assert!(checkpoint.status().is_success());
+
+    let body = checkpoint
+      .text()
+      .await
+      .expect("failed reading terraform checkpoint response body");
+    let payload: Value =
+      serde_json::from_str(&body).expect("failed to parse terraform checkpoint JSON");
+    let version = payload
+      .get("current_version")
+      .and_then(Value::as_str)
+      .expect("terraform checkpoint response missing current_version");
+
+    let url = format!(
+      "https://releases.hashicorp.com/terraform/{version}/terraform_{version}_linux_amd64.zip"
+    );
+    let response = client
+      .head(&url)
+      .send()
+      .await
+      .expect("failed to check terraform release file URL");
+    assert!(
+      response.status().is_success(),
+      "expected terraform release file to exist at '{}', got status {}",
+      url,
+      response.status()
+    );
   }
 }

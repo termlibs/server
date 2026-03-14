@@ -9,6 +9,7 @@ pub(crate) enum AppError {
   UnsupportedApp(String),
   NoMatchingAssets { repo: String, target: String },
   UpstreamGithub(String),
+  OctocrabError(String),
   Template(String),
 }
 
@@ -20,12 +21,13 @@ impl AppError {
       AppError::NoMatchingAssets { .. } => StatusCode::NOT_FOUND,
       AppError::UpstreamGithub(message) => {
         if message.to_ascii_lowercase().contains("rate limit") {
-          StatusCode::SERVICE_UNAVAILABLE
+          StatusCode::TOO_MANY_REQUESTS
         } else {
-          StatusCode::BAD_GATEWAY
+          StatusCode::SERVICE_UNAVAILABLE
         }
       }
       AppError::Template(_) => StatusCode::INTERNAL_SERVER_ERROR,
+      AppError::OctocrabError(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
   }
 
@@ -36,6 +38,7 @@ impl AppError {
       AppError::NoMatchingAssets { .. } => "no_matching_assets",
       AppError::UpstreamGithub(_) => "upstream_github_error",
       AppError::Template(_) => "template_error",
+      AppError::OctocrabError(_) => "octocrab_error",
     }
   }
 
@@ -51,6 +54,7 @@ impl AppError {
       }
       AppError::UpstreamGithub(message) => message.clone(),
       AppError::Template(message) => message.clone(),
+      AppError::OctocrabError(message) => message.clone(),
     }
   }
 }
@@ -80,6 +84,14 @@ impl From<tera::Error> for AppError {
 
 impl From<octocrab::Error> for AppError {
   fn from(value: octocrab::Error) -> Self {
-    Self::UpstreamGithub(value.to_string())
+    match value {
+      octocrab::Error::GitHub { source, .. } => Self::UpstreamGithub(format!(
+        "{} ({}) {}",
+        source.message,
+        source.status_code,
+        source.documentation_url.unwrap_or("".to_string())
+      )),
+      other => Self::OctocrabError(format!("{:?}", other)),
+    }
   }
 }

@@ -298,7 +298,7 @@ mod tests {
 
   async fn test_server() -> TestServer {
     let app = build_app().unwrap();
-    TestServer::new(app).unwrap()
+    TestServer::new(app)
   }
 
   #[tokio::test]
