@@ -2,6 +2,9 @@
 
 #{# template engine Tera #}
 
+#------------------------------------------------------------------------------
+# 01) Runtime Setup
+#------------------------------------------------------------------------------
 set -euo pipefail
 RUN_DIRECTORY="$PWD"
 _QUIET={{ quiet | escape_shell }}
@@ -9,38 +12,46 @@ _FORCE={{ force | escape_shell }}
 _CANONICAL_BINARY_NAME={{ app | escape_shell }}
 
 _E_GENERIC_ERROR=10
+
+#------------------------------------------------------------------------------
+# 02) Temporary Workspace and Exit Cleanup
+#------------------------------------------------------------------------------
 _TMPDIR="$(mktemp -d)"
 cd "$_TMPDIR"
-trap "[ -d \"$_TMPDIR\" ] &&  _log DEBUG \"Removing $_TMPDIR\" && rm -rf \"$_TMPDIR\"" EXIT
+trap "[ -d \"$_TMPDIR\" ] && _log DEBUG \"Removing $_TMPDIR\" && rm -rf \"$_TMPDIR\"" EXIT
 
+#------------------------------------------------------------------------------
+# 03) Log Level Configuration
+#------------------------------------------------------------------------------
 INSTALL_LOG_LEVEL={{ log_level | escape_shell }}
 case "$INSTALL_LOG_LEVEL" in
-    TRACE)
-      INSTALL_LOG_LEVEL=0
-      set -x
+  TRACE)
+    INSTALL_LOG_LEVEL=0
+    set -x
     ;;
-    DEBUG)
-      INSTALL_LOG_LEVEL=1
+  DEBUG)
+    INSTALL_LOG_LEVEL=1
     ;;
-    INFO)
-      INSTALL_LOG_LEVEL=2
+  INFO)
+    INSTALL_LOG_LEVEL=2
     ;;
-    WARN)
-      INSTALL_LOG_LEVEL=3
+  WARN)
+    INSTALL_LOG_LEVEL=3
     ;;
-    ERROR)
-      INSTALL_LOG_LEVEL=4
+  ERROR)
+    INSTALL_LOG_LEVEL=4
     ;;
-    FATAL)
-      INSTALL_LOG_LEVEL=5
+  FATAL)
+    INSTALL_LOG_LEVEL=5
     ;;
-    *)
-      INSTALL_LOG_LEVEL=2
-      _log ERROR "invalid log level: $INSTALL_LOG_LEVEL, using INFO"
+  *)
+    INSTALL_LOG_LEVEL=2
+    _log ERROR "invalid log level: $INSTALL_LOG_LEVEL, using INFO"
 esac
 
-
-
+#------------------------------------------------------------------------------
+# 04) Logging Helper
+#------------------------------------------------------------------------------
 _log() {
    case "$1" in
       DEBUG)
@@ -70,13 +81,16 @@ _log() {
    esac
 }
 
+#------------------------------------------------------------------------------
+# 05) Interactive Choice Prompt
+#------------------------------------------------------------------------------
 _ask_choices() {
   local choice choices opt add_none add_quit idx
   opt="$(getopt -o "" --long "none,quit" -n "${FUNCNAME[0]}" -- "$@")"
-  [ "$?" -eq 0 ] || {
+  if [ "$?" -ne 0 ]; then
     _log FATAL "invalid options"
     exit 1
-  }
+  fi
   eval set -- "$opt"
   add_none=false
   add_quit=false
@@ -122,7 +136,7 @@ _ask_choices() {
 
   local final_choices=()
   for c in $choice; do
-    case "$choice" in
+    case "$c" in
       [0-9]*)
         c=$((c - 1))
     esac
@@ -132,6 +146,9 @@ _ask_choices() {
 }
 
 
+#------------------------------------------------------------------------------
+# 06) Download Helper
+#------------------------------------------------------------------------------
 _urlget() {
   if command -v curl &> /dev/null; then
     curl -fsSL "$1" 2> /dev/null
@@ -142,6 +159,10 @@ _urlget() {
     return "$_E_GENERIC_ERROR"
   fi
 }
+
+#------------------------------------------------------------------------------
+# 07) Rendered Asset Arrays
+#------------------------------------------------------------------------------
 {% if (assets | length  > 0) %}
 _urls=( {% for asset in assets %}
   {{ asset.url | escape_shell }}
@@ -151,9 +172,15 @@ _filenames=( {% for asset in assets %}{{ asset.name | escape_shell }} {% endfor 
 _filetypes=( {% for asset in assets %}{{ asset.filetype | escape_shell }} {% endfor %})
 _printables=( {% for asset in assets %}{{ asset.name ~ " (" ~ asset.filetype ~ ")" | escape_shell }} {% endfor %})
 
+#------------------------------------------------------------------------------
+# 08) Asset Selection
+#------------------------------------------------------------------------------
 printf "Please select one of the following:\n"
 choice="$(_ask_choices --quit "${_printables[@]}")"
 
+#------------------------------------------------------------------------------
+# 09) Selection Validation
+#------------------------------------------------------------------------------
 case "$choice" in
   q|n)
     exit 0
@@ -168,15 +195,18 @@ case "$choice" in
     ;;
 esac
 
+#------------------------------------------------------------------------------
+# 10) Download and Install Dispatch
+#------------------------------------------------------------------------------
 printf "Downloading from %s to %s\n" "${_urls[$choice]}" "$_TMPDIR"
 _type="${_filetypes[$choice]}"
 case "$_type" in
-  "binary" | "Deb installer")
+  "binary" | "deb installer")
     filename="${_filenames[$choice]}"
     saved_file="$_TMPDIR/$filename"
     _urlget "${_urls[$choice]}" > "$saved_file"
 
-    if [ "$_type" = "Deb installer" ]; then
+    if [ "$_type" = "deb installer" ]; then
       if command -v dpkg &> /dev/null; then
         printf "trying to install with dpkg, this may prompt for sudo\n"
         dpkg -i "$saved_file" || sudo dpkg -i "$saved_file"
@@ -203,9 +233,11 @@ case "$_type" in
   "tar.gz")
     filename="${_filenames[$choice]}"
     _urlget "${_urls[$choice]}" | tar xz
-    executable_files=( $( find . -type f -executable -exec printf '{} ' \; ) )
+    executable_files=(
+      $(find . -type f -executable -exec printf '{} ' \;)
+    )
     {% raw %}
-    if [ "${#executable_files[@]}" -e 0 ]; then  {# raw block here to allow for the comment looking shell op #}
+    if [ "${#executable_files[@]}" -eq 0 ]; then  {# raw block here to allow for the comment looking shell op #}
     {% endraw %}
       _log FATAL "no executable files found in archive"
     else
@@ -224,5 +256,8 @@ case "$_type" in
     ;;
 esac
 {% else %}
+#------------------------------------------------------------------------------
+# 11) No Assets Available
+#------------------------------------------------------------------------------
 _log FATAL "no assets found"
 {% endif %}
