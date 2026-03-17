@@ -8,4 +8,5 @@ shellcheck,koalaman/shellcheck,github,shellcheck-vVERSION.linux.x86_64.tar.xz,sh
 shfmt,mvdan/sh,github,shfmt_vVERSION_darwin_amd64,-,-,-
 terraform,releases.hashicorp.com,url,terraform/VERSION/terraform_VERSION_linux_amd64.zip,terraform,0,-
 yutc,adam-huganir/yutc,github,yutc-linux-amd64,-,-,-
+uv,astral-sh/uv,github,,-,-,-
 glances,-,pip,glances,-,-,-

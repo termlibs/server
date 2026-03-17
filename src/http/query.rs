@@ -95,6 +95,34 @@ fn default_inline() -> bool {
 }
 
 impl InstallQueryOptions {
+  pub(crate) fn new(
+    app: Option<String>,
+    version: Option<String>,
+    prefix: Option<String>,
+    arch: Option<TargetArch>,
+    os: Option<TargetOs>,
+    method: Option<InstallMethod>,
+    download_only: Option<bool>,
+    force: Option<bool>,
+    quiet: Option<bool>,
+    log_level: Option<String>,
+    inline: Option<bool>,
+  ) -> Self {
+    Self {
+      app,
+      version: version.unwrap_or_else(default_latest),
+      prefix: prefix.unwrap_or_else(default_prefix),
+      arch: arch.unwrap_or_else(default_arch),
+      os: os.unwrap_or_else(default_os),
+      method: method.unwrap_or_else(default_method),
+      download_only: download_only.unwrap_or_else(default_download_only),
+      force: force.unwrap_or_else(default_force),
+      quiet: quiet.unwrap_or_else(default_quiet),
+      log_level: log_level.unwrap_or_else(default_log_level),
+      inline: inline.unwrap_or_else(default_inline),
+    }
+  }
+
   pub(crate) fn set_app(&mut self, app: String) {
     self.app = Some(app);
   }
