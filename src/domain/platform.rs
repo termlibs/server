@@ -148,7 +148,7 @@ impl Display for TargetArch {
 }
 
 impl TargetArch {
-  fn identify(input: &str) -> TargetArch {
+  pub(crate) fn identify(input: &str) -> TargetArch {
     let amd = ["amd64", "x64", "x86_64"];
     let x86 = ["x86", "i386", "i686", "x86_32", "386", "686", "ia32"];
     let arm = ["arm64"];
