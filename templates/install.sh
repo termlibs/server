@@ -2,81 +2,35 @@
 
 #{# template engine Tera #}
 
+#------------------------------------------------------------------------------
+# 01) Runtime Setup
+#------------------------------------------------------------------------------
 set -euo pipefail
+{% if (assets | length  > 0) %}
 RUN_DIRECTORY="$PWD"
 _QUIET={{ quiet | escape_shell }}
 _FORCE={{ force | escape_shell }}
 _CANONICAL_BINARY_NAME={{ app | escape_shell }}
 
-_E_GENERIC_ERROR=10
+_E_GENERIC_ERROR=1
+
+#------------------------------------------------------------------------------
+# 02) Temporary Workspace and Exit Cleanup
+#------------------------------------------------------------------------------
 _TMPDIR="$(mktemp -d)"
 cd "$_TMPDIR"
-trap "[ -d \"$_TMPDIR\" ] &&  _log DEBUG \"Removing $_TMPDIR\" && rm -rf \"$_TMPDIR\"" EXIT
+trap "[ -d \"$_TMPDIR\" ] && printf 'Removing %s\n' \"$_TMPDIR\" >&2 && rm -rf \"$_TMPDIR\"" EXIT
 
-INSTALL_LOG_LEVEL={{ log_level | escape_shell }}
-case "$INSTALL_LOG_LEVEL" in
-    TRACE)
-      INSTALL_LOG_LEVEL=0
-      set -x
-    ;;
-    DEBUG)
-      INSTALL_LOG_LEVEL=1
-    ;;
-    INFO)
-      INSTALL_LOG_LEVEL=2
-    ;;
-    WARN)
-      INSTALL_LOG_LEVEL=3
-    ;;
-    ERROR)
-      INSTALL_LOG_LEVEL=4
-    ;;
-    FATAL)
-      INSTALL_LOG_LEVEL=5
-    ;;
-    *)
-      INSTALL_LOG_LEVEL=2
-      _log ERROR "invalid log level: $INSTALL_LOG_LEVEL, using INFO"
-esac
-      
-
-
-_log() {
-   case "$1" in
-      DEBUG)
-        [ "$INSTALL_LOG_LEVEL" -le 1 ] || return
-        echo "DEBUG: $2" >&2
-        ;;
-      INFO)
-        [ "$INSTALL_LOG_LEVEL" -le 2 ] || return
-        echo "INFO: $2" >&2
-        ;;
-      WARN)
-        [ "$INSTALL_LOG_LEVEL" -le 3 ] || return
-        echo "WARN: $2" >&2
-        ;;
-      ERROR)
-        [ "$INSTALL_LOG_LEVEL" -le 4 ] || return
-        echo "ERROR: $2" >&2
-        ;;
-      FATAL)
-        [ "$INSTALL_LOG_LEVEL" -le 5 ] || return
-        echo "FATAL: $2" >&2
-        exit 100
-        ;;
-      *)
-        return 1
-        ;;
-   esac
-}
-
+#------------------------------------------------------------------------------
+# 03) Interactive Choice Prompt
+#------------------------------------------------------------------------------
 _ask_choices() {
   local choice choices opt add_none add_quit idx
   opt="$(getopt -o "" --long "none,quit" -n "${FUNCNAME[0]}" -- "$@")"
-  [ "$?" -eq 0 ] || {
-    _log FATAL "invalid options"
+  if [ "$?" -ne 0 ]; then
+    printf "invalid options\n" >&2
     exit 1
-  }
+  fi
   eval set -- "$opt"
   add_none=false
   add_quit=false
@@ -99,7 +53,7 @@ _ask_choices() {
   choices=("$@")
   {% raw %}
   if [ "${#choices[@]}" -eq 0 ]; then
-    _log FATAL "no choices provided"
+    printf "no choices provided\n" >&2
     exit 1
   fi
   {% endraw %}
@@ -118,11 +72,11 @@ _ask_choices() {
   fi
 
   printf "Enter choice: " 1>&2
-  read -r choice
+  read -r choice </dev/tty
 
   local final_choices=()
   for c in $choice; do
-    case "$choice" in
+    case "$c" in
       [0-9]*)
         c=$((c - 1))
     esac
@@ -132,94 +86,124 @@ _ask_choices() {
 }
 
 
+#------------------------------------------------------------------------------
+# 04) Download Helper
+#------------------------------------------------------------------------------
 _urlget() {
   if command -v curl &> /dev/null; then
     curl -fsSL "$1" 2> /dev/null
   elif command -v wget &> /dev/null; then
     wget -qO- "$1" 2> /dev/null
   else
-    _log ERROR "neither curl nor wget found, unable to download files"
+    printf "neither curl nor wget found, unable to download files\n" >&2
     return "$_E_GENERIC_ERROR"
   fi
 }
-{% if (assets | length  > 0) %}
-_urls=( {% for asset in assets %}{{ asset.url | escape_shell }} {% endfor %})
+
+#------------------------------------------------------------------------------
+# 05) Rendered Asset Arrays
+#------------------------------------------------------------------------------
+_urls=( {% for asset in assets %}
+  {{ asset.url | escape_shell }}
+{%- endfor %}
+)
 _filenames=( {% for asset in assets %}{{ asset.name | escape_shell }} {% endfor %})
 _filetypes=( {% for asset in assets %}{{ asset.filetype | escape_shell }} {% endfor %})
 _printables=( {% for asset in assets %}{{ asset.name ~ " (" ~ asset.filetype ~ ")" | escape_shell }} {% endfor %})
 
+#------------------------------------------------------------------------------
+# 06) Asset Selection
+#------------------------------------------------------------------------------
 printf "Please select one of the following:\n"
 choice="$(_ask_choices --quit "${_printables[@]}")"
 
+#------------------------------------------------------------------------------
+# 07) Selection Validation
+#------------------------------------------------------------------------------
 case "$choice" in
   q|n)
     exit 0
     ;;
   [0-9]*)
     if ! [ "$choice" -lt {% raw %}"${#_urls[@]}"{% endraw %} ]; then
-      _log FATAL "invalid choice: $choice"
+      printf "invalid choice: %s\n" "$choice" >&2
+      exit 100
     fi
     ;;
   *)
-    _log FATAL "invalid choice: $choice"
+    printf "invalid choice: %s\n" "$choice" >&2
+    exit 100
     ;;
 esac
 
+#------------------------------------------------------------------------------
+# 08) Download and Install Dispatch
+#------------------------------------------------------------------------------
 printf "Downloading from %s to %s\n" "${_urls[$choice]}" "$_TMPDIR"
 _type="${_filetypes[$choice]}"
 case "$_type" in
-  "binary" | "Deb installer")
+  "binary" | "deb installer")
     filename="${_filenames[$choice]}"
     saved_file="$_TMPDIR/$filename"
     _urlget "${_urls[$choice]}" > "$saved_file"
 
-    if [ "$_type" = "Deb installer" ]; then
+    if [ "$_type" = "deb installer" ]; then
       if command -v dpkg &> /dev/null; then
         printf "trying to install with dpkg, this may prompt for sudo\n"
         dpkg -i "$saved_file" || sudo dpkg -i "$saved_file"
       else
-        _log FATAL "dpkg not found, unable to install package"
+        printf "dpkg not found, unable to install package\n" >&2
+        exit 100
       fi
     elif [ "$_type" = "binary" ]; then
       chmod +x "$saved_file"
 
       if [ -z "$_CANONICAL_BINARY_NAME" ]; then
-        read -r -p "enter alternate binary name (default: $filename): " binary_name
+        read -r -p "enter alternate binary name (default: $filename): " binary_name </dev/tty
         binary_name="${binary_name:-$filename}"
       else
         binary_name="$_CANONICAL_BINARY_NAME"
       fi
-      read -r -p "enter alternate binary directory (default: $RUN_DIRECTORY/bin): " binary_dir
+      read -r -p "enter alternate binary directory (default: $RUN_DIRECTORY/bin): " binary_dir </dev/tty
       binary_dir="${binary_dir:-$RUN_DIRECTORY/bin}"
       mkdir -p "$binary_dir"
       cp "$saved_file" "$binary_dir/$binary_name"
     else
-      _log FATAL "invalid filetype: $_type"
+      printf "invalid filetype: %s\n" "$_type" >&2
+      exit 100
     fi
     ;;
   "tar.gz")
     filename="${_filenames[$choice]}"
     _urlget "${_urls[$choice]}" | tar xz
-    executable_files=( $( find . -type f -executable -exec printf '{} ' \; ) )
+    executable_files=(
+      $(find . -type f -executable -exec printf '{} ' \;)
+    )
     {% raw %}
-    if [ "${#executable_files[@]}" -e 0 ]; then  {# raw block here to allow for the comment looking shell op #}
+    if [ "${#executable_files[@]}" -eq 0 ]; then  {# raw block here to allow for the comment looking shell op #}
     {% endraw %}
-      _log FATAL "no executable files found in archive"
+      printf "no executable files found in archive\n" >&2
+      exit 100
     else
-      choices="$(_ask_choices --quit ${executable_files[@]})"
+      choices="$(_ask_choices --quit "${executable_files[@]}")"
     fi
     for choice in $choices; do
       case "$choice" in
         [0-9]*)
-          cp ${executable_files[$choice]} "$RUN_DIRECTORY/bin"
+          cp "${executable_files[$choice]}" "$RUN_DIRECTORY/bin"
           ;;
       esac
     done
     ;;
   *)
-    _log FATAL "invalid filetype: ${_filetypes[$choice]}"
+    printf "invalid filetype: %s\n" "${_filetypes[$choice]}" >&2
+    exit 100
     ;;
 esac
 {% else %}
-_log FATAL "no assets found"
+#------------------------------------------------------------------------------
+# 09) No Assets Available
+#------------------------------------------------------------------------------
+printf "no assets found\n" >&2
+exit 100
 {% endif %}

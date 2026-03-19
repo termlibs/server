@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{title}}</title>
+  <style>/*__HIGHLIGHT_CSS__*/</style>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #0b0f17;
+      color: #e6edf3;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .container {
+      width: min(98vw, 1800px);
+      margin: 0 auto;
+    }
+    .title {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      color: #9fb3c8;
+    }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+    .copy-button {
+      border: 1px solid #2f3a4f;
+      background: #111827;
+      color: #e6edf3;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .copy-button:hover {
+      background: #172033;
+    }
+    .code-link {
+      color: #7cc7ff;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    pre {
+      margin: 0;
+      padding: 18px 20px;
+      border-radius: 10px;
+      overflow-x: auto;
+      border: 1px solid #263041;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    code {
+      font-size: 14px;
+      line-height: 1.55;
+      tab-size: 2;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="toolbar">
+      <p class="title">{{filename}}</p>
+      <button id="copy-script" class="copy-button" type="button">Copy script</button>
+    </div>
+    <pre><code id="script-code" class="language-{{language}}">{{code}}</code></pre>
+  </div>
+  <script>/*__HIGHLIGHT_JS__*/</script>
+  <script>
+    const linkifyUrlsInUrlsLines = (highlightedHtml, rawScriptText) => {
+      const highlightedLines = highlightedHtml.split("\n");
+      const rawLines = rawScriptText.split("\n");
+      const lineCount = Math.max(highlightedLines.length, rawLines.length);
+      let inUrlsBlock = false;
+
+      for (let i = 0; i < lineCount; i += 1) {
+        const rawLine = rawLines[i] ?? "";
+        const trimmedRawLine = rawLine.trim();
+        if (trimmedRawLine.includes("_urls=(") || trimmedRawLine.includes("_urls =(")) {
+          inUrlsBlock = true;
+          continue;
+        }
+        if (inUrlsBlock && trimmedRawLine === ")") {
+          inUrlsBlock = false;
+          continue;
+        }
+        if (!inUrlsBlock) continue;
+
+        const highlightedLine = highlightedLines[i] ?? "";
+        highlightedLines[i] = highlightedLine.replace(
+          /https?:\/\/[^\s<)]+/g,
+          (matchedUrl) => {
+            const cleanUrl = matchedUrl.replace(/(?:&#x27;|&quot;|['"`])+$/g, "");
+            const trailing = matchedUrl.slice(cleanUrl.length);
+            return `<a class="code-link" href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanUrl}</a>${trailing}`;
+          }
+        );
+      }
+
+      return highlightedLines.join("\n");
+    };
+
+    const copyButton = document.getElementById("copy-script");
+    const scriptCode = document.getElementById("script-code");
+    const rawScript = scriptCode?.textContent ?? "";
+    const classNames = scriptCode ? [...scriptCode.classList] : [];
+    const languageClass = classNames.find((name) =>
+      name.startsWith("language-")
+    );
+    const language = languageClass?.replace("language-", "");
+    /**
+     * @typedef {{ value: string }} HljsResult
+     * @typedef {{
+     *   highlight: (code: string, options: { language: string }) => HljsResult,
+     *   highlightAuto: (code: string) => HljsResult
+     * }} HljsApi
+     */
+    /** @type {HljsApi | undefined} */
+    const hljsLib = window["hljs"];
+    if (scriptCode && rawScript && hljsLib) {
+      const highlighted = language
+        ? hljsLib.highlight(rawScript, { language }).value
+        : hljsLib.highlightAuto(rawScript).value;
+      scriptCode.innerHTML = linkifyUrlsInUrlsLines(highlighted, rawScript);
+    }
+
+    copyButton?.addEventListener("click", async () => {
+      const scriptText = scriptCode?.textContent ?? "";
+      if (!scriptText) return;
+      try {
+        await navigator.clipboard.writeText(scriptText);
+        copyButton.textContent = "Copied!";
+        setTimeout(() => {
+          copyButton.textContent = "Copy script";
+        }, 1500);
+      } catch {
+        copyButton.textContent = "Copy failed";
+        setTimeout(() => {
+          copyButton.textContent = "Copy script";
+        }, 1500);
+      }
+    });
+  </script>
+</body>
+</html>
