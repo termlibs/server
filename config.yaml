@@ -1,0 +1,11 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+cache:
+  github_releases:
+    max_capacity: 100
+    ttl_seconds: 600  # 10 minutes
+
+github:
+  api_timeout_seconds: 10
