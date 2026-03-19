@@ -7,13 +7,13 @@
 #------------------------------------------------------------------------------
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
+{% if (assets | length > 0) %}
 $RUN_DIRECTORY = $PWD.Path
 $_QUIET = {{ quiet | escape_shell }}
 $_FORCE = {{ force | escape_shell }}
 $_CANONICAL_BINARY_NAME = {{ app | escape_shell }}
 
-$_E_GENERIC_ERROR = 10
+$_E_GENERIC_ERROR = 1
 
 #------------------------------------------------------------------------------
 # 02) Temporary Workspace and Exit Cleanup
@@ -26,7 +26,7 @@ Set-Location $_TMPDIR.FullName
 
 $cleanup = {
     if (Test-Path $_TMPDIR) {
-        Write-LogMessage "DEBUG" "Removing $_TMPDIR"
+        [Console]::Error.WriteLine("Removing $_TMPDIR")
         Remove-Item $_TMPDIR -Recurse -Force -ErrorAction SilentlyContinue
     }
     Set-Location $RUN_DIRECTORY
@@ -36,65 +36,7 @@ Register-EngineEvent PowerShell.Exiting -Action $cleanup | Out-Null
 trap { & $cleanup; break }
 
 #------------------------------------------------------------------------------
-# 03) Log Level Configuration
-#------------------------------------------------------------------------------
-$INSTALL_LOG_LEVEL = {{ log_level | escape_shell }}
-switch ($INSTALL_LOG_LEVEL) {
-    "TRACE" {
-        $INSTALL_LOG_LEVEL = 0
-        $VerbosePreference = "Continue"
-        $DebugPreference = "Continue"
-    }
-    "DEBUG" { $INSTALL_LOG_LEVEL = 1 }
-    "INFO" { $INSTALL_LOG_LEVEL = 2 }
-    "WARN" { $INSTALL_LOG_LEVEL = 3 }
-    "ERROR" { $INSTALL_LOG_LEVEL = 4 }
-    "FATAL" { $INSTALL_LOG_LEVEL = 5 }
-    default {
-        $INSTALL_LOG_LEVEL = 2
-        Write-Error "invalid log level: $INSTALL_LOG_LEVEL, using INFO"
-    }
-}
-
-#------------------------------------------------------------------------------
-# 04) Logging Helper
-#------------------------------------------------------------------------------
-function Write-LogMessage {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Level,
-        [Parameter(Mandatory = $true)]
-        [string]$Message
-    )
-
-    $levelNum = switch ($Level) {
-        "DEBUG" { 1 }
-        "INFO" { 2 }
-        "WARN" { 3 }
-        "ERROR" { 4 }
-        "FATAL" { 5 }
-        default { return }
-    }
-
-    if ($levelNum -ge $INSTALL_LOG_LEVEL) {
-        Write-Host "$Level`: $Message" -ForegroundColor $(
-            switch ($Level) {
-                "DEBUG" { "Gray" }
-                "INFO" { "White" }
-                "WARN" { "Yellow" }
-                "ERROR" { "Red" }
-                "FATAL" { "DarkRed" }
-            }
-        )
-
-        if ($Level -eq "FATAL") {
-            exit 100
-        }
-    }
-}
-
-#------------------------------------------------------------------------------
-# 05) Interactive Choice Prompt
+# 03) Interactive Choice Prompt
 #------------------------------------------------------------------------------
 function Get-UserChoice {
     param(
@@ -105,7 +47,7 @@ function Get-UserChoice {
     )
 
     if ($Choices.Count -eq 0) {
-        Write-LogMessage "FATAL" "no choices provided"
+        [Console]::Error.WriteLine("no choices provided")
         exit 1
     }
 
@@ -144,7 +86,7 @@ function Get-UserChoice {
 }
 
 #------------------------------------------------------------------------------
-# 06) Download Helper
+# 04) Download Helper
 #------------------------------------------------------------------------------
 function Get-WebContent {
     param(
@@ -162,7 +104,7 @@ function Get-WebContent {
         }
     }
     catch {
-        Write-LogMessage "ERROR" "Failed to download from $Url`: $_"
+        [Console]::Error.WriteLine("Failed to download from $Url`: $_")
         if ($OutFile) {
             return $false
         }
@@ -171,33 +113,33 @@ function Get-WebContent {
 }
 
 #------------------------------------------------------------------------------
-# 07) Rendered Asset Arrays
+# 05) Rendered Asset Arrays
 #------------------------------------------------------------------------------
-{% if (assets | length > 0) %}
 $_urls = @({% for asset in assets %}"{{ asset.url | escape_shell }}"{% if not loop.last %}, {% endif %}{% endfor %})
 $_filenames = @({% for asset in assets %}"{{ asset.name | escape_shell }}"{% if not loop.last %}, {% endif %}{% endfor %})
 $_filetypes = @({% for asset in assets %}"{{ asset.filetype | escape_shell }}"{% if not loop.last %}, {% endif %}{% endfor %})
 $_printables = @({% for asset in assets %}"{{ asset.name ~ " (" ~ asset.filetype ~ ")" | escape_shell }}"{% if not loop.last %}, {% endif %}{% endfor %})
 
 #------------------------------------------------------------------------------
-# 08) Asset Selection
+# 06) Asset Selection
 #------------------------------------------------------------------------------
 Write-Host "Please select one of the following:"
 $choice = Get-UserChoice -Choices $_printables -AllowQuit
 
 #------------------------------------------------------------------------------
-# 09) Selection Validation
+# 07) Selection Validation
 #------------------------------------------------------------------------------
 if ($choice -eq "q" -or $choice -eq "n") {
     exit 0
 }
 
 if ($choice -lt 0 -or $choice -ge $_urls.Count) {
-    Write-LogMessage "FATAL" "invalid choice: $choice"
+    [Console]::Error.WriteLine("invalid choice: $choice")
+    exit 100
 }
 
 #------------------------------------------------------------------------------
-# 10) Download and Install Dispatch
+# 08) Download and Install Dispatch
 #------------------------------------------------------------------------------
 Write-Host "Downloading from $($_urls[$choice]) to $_TMPDIR"
 $_type = $_filetypes[$choice]
@@ -207,7 +149,8 @@ switch ($_type) {
         $filename = $_filenames[$choice]
         $saved_file = Join-Path $_TMPDIR.FullName $filename
         if (-not (Get-WebContent -Url $_urls[$choice] -OutFile $saved_file)) {
-            Write-LogMessage "FATAL" "failed downloading binary asset"
+            [Console]::Error.WriteLine("failed downloading binary asset")
+            exit 100
         }
 
         if ([string]::IsNullOrWhiteSpace($_CANONICAL_BINARY_NAME)) {
@@ -234,19 +177,23 @@ switch ($_type) {
         Write-Host "Installed $binary_name to $dest_path"
     }
     "deb installer" {
-        Write-LogMessage "FATAL" "deb installer is not supported on Windows"
+        [Console]::Error.WriteLine("deb installer is not supported on Windows")
+        exit 100
     }
     "rpm installer" {
-        Write-LogMessage "FATAL" "rpm installer is not supported on Windows"
+        [Console]::Error.WriteLine("rpm installer is not supported on Windows")
+        exit 100
     }
     "pkg installer" {
-        Write-LogMessage "FATAL" "pkg installer is not supported on Windows"
+        [Console]::Error.WriteLine("pkg installer is not supported on Windows")
+        exit 100
     }
     "msi installer" {
         $filename = $_filenames[$choice]
         $saved_file = Join-Path $_TMPDIR.FullName $filename
         if (-not (Get-WebContent -Url $_urls[$choice] -OutFile $saved_file)) {
-            Write-LogMessage "FATAL" "failed downloading msi installer"
+            [Console]::Error.WriteLine("failed downloading msi installer")
+            exit 100
         }
         Write-Host "Launching MSI installer..."
         Start-Process msiexec.exe -ArgumentList "/i `"$saved_file`"" -Wait
@@ -255,7 +202,8 @@ switch ($_type) {
         $filename = $_filenames[$choice]
         $saved_file = Join-Path $_TMPDIR.FullName $filename
         if (-not (Get-WebContent -Url $_urls[$choice] -OutFile $saved_file)) {
-            Write-LogMessage "FATAL" "failed downloading exe installer"
+            [Console]::Error.WriteLine("failed downloading exe installer")
+            exit 100
         }
         Write-Host "Launching EXE installer..."
         Start-Process -FilePath $saved_file -Wait
@@ -266,7 +214,8 @@ switch ($_type) {
         # Download and extract tar.gz
         $archive_path = Join-Path $_TMPDIR.FullName $filename
         if (-not (Get-WebContent -Url $_urls[$choice] -OutFile $archive_path)) {
-            Write-LogMessage "FATAL" "failed downloading tar.gz archive"
+            [Console]::Error.WriteLine("failed downloading tar.gz archive")
+            exit 100
         }
 
         # Extract using tar (available in Windows 10 1803+) or 7-Zip if available
@@ -282,7 +231,8 @@ switch ($_type) {
             }
         }
         else {
-            Write-LogMessage "FATAL" "No extraction tool found. Please install tar or 7-Zip"
+            [Console]::Error.WriteLine("No extraction tool found. Please install tar or 7-Zip")
+            exit 100
         }
 
         # Find executable files
@@ -294,7 +244,8 @@ switch ($_type) {
         }
 
         if ($executable_files.Count -eq 0) {
-            Write-LogMessage "FATAL" "no executable files found in archive"
+            [Console]::Error.WriteLine("no executable files found in archive")
+            exit 100
         } else {
             $choices = Get-UserChoice -Choices $executable_files -AllowQuit
 
@@ -313,14 +264,16 @@ switch ($_type) {
         }
     }
     default {
-        Write-LogMessage "FATAL" "invalid filetype: $_type"
+        [Console]::Error.WriteLine("invalid filetype: $_type")
+        exit 100
     }
 }
 {% else %}
 #------------------------------------------------------------------------------
-# 11) No Assets Available
+# 09) No Assets Available
 #------------------------------------------------------------------------------
-Write-LogMessage "FATAL" "no assets found"
+[Console]::Error.WriteLine("no assets found")
+exit 100
 {% endif %}
 
 # cleanup execution for non-engine-exit completion paths
