@@ -57,6 +57,14 @@ impl ScriptResponse {
       .replace("/*__HIGHLIGHT_CSS__*/", HIGHLIGHT_CSS)
       .replace("{{code}}", escaped_code.as_str())
   }
+
+  pub(crate) fn render_body(&self) -> String {
+    if self.html {
+      self.as_html_document()
+    } else {
+      self.body.clone()
+    }
+  }
 }
 
 impl IntoResponse for ScriptResponse {

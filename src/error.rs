@@ -2,6 +2,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
+use serde_json::to_string;
 
 #[derive(Debug)]
 pub(crate) enum AppError {
@@ -14,6 +15,14 @@ pub(crate) enum AppError {
 }
 
 impl AppError {
+  pub(crate) fn to_json(&self) -> String {
+    let body = ErrorBody {
+      error: self.code(),
+      message: self.message(),
+    };
+    to_string(&body).unwrap_or_else(|_| "{\"error\":\"unknown\",\"message\":\"serialization failure\"}".to_string())
+  }
+
   fn status_code(&self) -> StatusCode {
     match self {
       AppError::InvalidInput(_) => StatusCode::BAD_REQUEST,

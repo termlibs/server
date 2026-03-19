@@ -25,15 +25,19 @@ mod services;
 mod static_site;
 mod supported_apps;
 mod templates;
+mod cli;
 
 use crate::domain::platform::{TargetArch, TargetOs};
+use crate::cli::{CliInstallOutput, Commands, ScriptCommands};
 use crate::error::AppError;
 use crate::http::query::{InstallMethod, InstallQueryOptions};
 use crate::http::responses::ScriptResponse;
 use crate::services::installer;
 use crate::templates::TEMPLATES;
+use clap_complete::generate;
 use log::{debug, info, warn};
 use std::env;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::time::Instant;
@@ -220,25 +224,42 @@ async fn log_requests_middleware(request: Request, next: Next) -> impl IntoRespo
 )]
 struct ApiDoc;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-  let log_level = env::var("LOG_LEVEL").unwrap_or("INFO".into());
-  setup_logger(log_level.as_str()).context("failed to initialize logger")?;
-
+async fn run_server(serve_args: Option<&cli::ServeArgs>) -> anyhow::Result<()> {
   // Load config (also initializes lazy static CONFIG)
   let config = &config::CONFIG;
+
+  let log_level = serve_args
+    .and_then(|args| args.log_level().map(|v| v.to_string()))
+    .unwrap_or_else(|| env::var("LOG_LEVEL").unwrap_or("INFO".to_string()));
+
+  setup_logger(log_level.as_str()).context("failed to initialize logger")?;
 
   // make sure the templates are loaded early to check for errors
   TEMPLATES.get_template_names().for_each(|name| {
     info!("template loaded: {}", name);
   });
 
-  let listen_ip = env::var("LISTEN_IP").unwrap_or(config.server.host.clone());
-  let port = env::var("PORT").unwrap_or(config.server.port.to_string());
+  let port = serve_args
+    .and_then(|args| args.port())
+    .map(Ok)
+    .unwrap_or_else(|| {
+      env::var("PORT")
+        .unwrap_or_else(|_| config.server.port.to_string())
+        .parse::<u16>()
+        .with_context(|| "invalid PORT value; expected u16".to_string())
+    })?;
+
+  let listen_ip: String = serve_args
+    .and_then(|args| args.listen().map(|v| v.to_string()))
+    .unwrap_or_else(|| env::var("LISTEN_IP").unwrap_or_else(|_| config.server.host.clone()));
+
+  let log_requests_enabled = serve_args
+    .map(|args| args.log_requests())
+    .unwrap_or_else(|| is_truthy_env("LOG_REQUESTS"));
 
   info!("starting server at {:?}:{}", listen_ip, port);
 
-  let app = build_app()?;
+  let app = build_app(log_requests_enabled)?;
 
   let addr = format!("{}:{}", listen_ip, port)
     .parse::<SocketAddr>()
@@ -251,6 +272,51 @@ async fn main() -> anyhow::Result<()> {
     .await
     .context("axum server exited with error")?;
   Ok(())
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+  let cli = cli::parse();
+
+  match cli.command {
+    Some(Commands::Script(script_cmd)) => match script_cmd {
+      ScriptCommands::Install(args) => match args.run().await {
+        Ok(output) => {
+          let body = match output {
+            CliInstallOutput::Script(response) => response.render_body(),
+            CliInstallOutput::Links(json) => json,
+          };
+          io::stdout().write_all(body.as_bytes())?;
+          Ok(())
+        }
+        Err(err) => {
+          eprintln!("{}", err.to_json());
+          std::process::exit(1);
+        }
+      },
+    },
+    Some(Commands::Install(args)) => match args.run().await {
+      Ok(output) => {
+        let body = match output {
+          CliInstallOutput::Script(response) => response.render_body(),
+          CliInstallOutput::Links(json) => json,
+        };
+        io::stdout().write_all(body.as_bytes())?;
+        Ok(())
+      }
+      Err(err) => {
+        eprintln!("{}", err.to_json());
+        std::process::exit(1);
+      }
+    },
+    Some(Commands::Completions(args)) => {
+      let mut command = cli::build_command();
+      generate(args.shell, &mut command, "termlibs", &mut io::stdout());
+      Ok(())
+    }
+    Some(Commands::Serve(args)) => run_server(Some(&args)).await,
+    None => run_server(None).await,
+  }
 }
 
 fn build_cors_layer() -> anyhow::Result<CorsLayer> {
@@ -271,7 +337,7 @@ fn build_cors_layer() -> anyhow::Result<CorsLayer> {
   )
 }
 
-fn build_app() -> anyhow::Result<Router> {
+fn build_app(log_requests_enabled: bool) -> anyhow::Result<Router> {
   let cors = build_cors_layer()?;
   let v1_router = Router::new()
     .route(
@@ -291,8 +357,8 @@ fn build_app() -> anyhow::Result<Router> {
     .fallback(not_found_handler)
     .layer(cors);
 
-  if is_truthy_env("LOG_REQUESTS") {
-    debug!("request logging middleware enabled via LOG_REQUESTS");
+  if log_requests_enabled {
+    debug!("request logging middleware enabled");
     app = app.layer(middleware::from_fn(log_requests_middleware));
   }
 
@@ -305,7 +371,7 @@ mod tests {
   use axum_test::TestServer;
 
   async fn test_server() -> TestServer {
-    let app = build_app().unwrap();
+    let app = build_app(false).unwrap();
     TestServer::new(app)
   }
 
