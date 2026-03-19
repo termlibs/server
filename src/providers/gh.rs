@@ -213,6 +213,7 @@ mod tests {
   }
 
   #[tokio::test]
+  #[ignore = "flaky: makes live GitHub API calls that hit rate limits"]
   async fn sanity_known_github_apps_latest_release_lookup() {
     let _guard = lock_api_sanity_tests();
     for (repo, deployment) in [

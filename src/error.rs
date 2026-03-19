@@ -20,7 +20,9 @@ impl AppError {
       error: self.code(),
       message: self.message(),
     };
-    to_string(&body).unwrap_or_else(|_| "{\"error\":\"unknown\",\"message\":\"serialization failure\"}".to_string())
+    to_string(&body).unwrap_or_else(|_| {
+      "{\"error\":\"unknown\",\"message\":\"serialization failure\"}".to_string()
+    })
   }
 
   fn status_code(&self) -> StatusCode {

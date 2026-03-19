@@ -7,7 +7,10 @@ use crate::http::query::{InstallMethod, InstallQueryOptions};
 use crate::http::responses::ScriptResponse;
 use crate::services::installer;
 use crate::supported_apps::{self, Repo, SupportedApp};
-use crossterm::{execute, style::{style, Color, Print, Stylize}};
+use crossterm::{
+  execute,
+  style::{style, Color, Print, Stylize},
+};
 use flate2::read::GzDecoder;
 use mime::Mime;
 use serde_json::Value;
@@ -122,7 +125,9 @@ impl InstallArgs {
     let tempdir = create_tempdir()?;
     let (links, labels) = plan.resolve_links().await?;
     let selection = if labels.len() == 1 {
-      ct_write_line(style(format!("Only one download found; selecting {}", labels[0])).with(Color::Yellow))?;
+      ct_write_line(
+        style(format!("Only one download found; selecting {}", labels[0])).with(Color::Yellow),
+      )?;
       0
     } else {
       prompt_for_choice(&labels)?
@@ -135,7 +140,8 @@ impl InstallArgs {
     let mut chosen_name = None;
     let mut chosen_archive_entry = None;
     if is_probably_binary(&selected_link.content_type) {
-      let downloaded_path = download_asset(&selected_link.url, &tempdir, &selected_link.name).await?;
+      let downloaded_path =
+        download_asset(&selected_link.url, &tempdir, &selected_link.name).await?;
       let default_dir = env::current_dir()
         .map(|p| p.join("bin"))
         .unwrap_or_else(|_| PathBuf::from("bin"));
@@ -147,13 +153,16 @@ impl InstallArgs {
       chosen_name = Some(binary_name);
       ct_write_line(style(format!("Copied to {}", final_path.display())).with(Color::Green))?;
     } else if is_archive(&selected_link.content_type, &selected_link.name) {
-      let downloaded_path = download_asset(&selected_link.url, &tempdir, &selected_link.name).await?;
+      let downloaded_path =
+        download_asset(&selected_link.url, &tempdir, &selected_link.name).await?;
       let entries = list_archive_entries(&downloaded_path)?;
       if entries.is_empty() {
         return Err(AppError::InvalidInput("archive is empty".to_string()));
       }
       if entries.len() == 1 {
-        ct_write_line(style(format!("Only one entry found; selecting {}", entries[0])).with(Color::Yellow))?;
+        ct_write_line(
+          style(format!("Only one entry found; selecting {}", entries[0])).with(Color::Yellow),
+        )?;
         chosen_archive_entry = Some(entries[0].clone());
       } else {
         render_tree(&entries)?;
@@ -204,11 +213,17 @@ enum InstallTarget {
 
 impl NativeInstallPlan {
   fn from_args(args: &InstallArgs) -> Result<Self, AppError> {
-    let env_os = env::var("TERMLIBS_OS").ok().map(|v| TargetOs::from(v.as_str()));
-    let env_arch = env::var("TERMLIBS_ARCH").ok().map(|v| TargetArch::from(v.as_str()));
+    let env_os = env::var("TERMLIBS_OS")
+      .ok()
+      .map(|v| TargetOs::from(v.as_str()));
+    let env_arch = env::var("TERMLIBS_ARCH")
+      .ok()
+      .map(|v| TargetArch::from(v.as_str()));
     let env_version = env::var("TERMLIBS_VERSION").ok();
     let env_prefix = env::var("TERMLIBS_PREFIX").ok();
-    let env_method = env::var("TERMLIBS_METHOD").ok().map(|v| InstallMethod::from(v.as_str()));
+    let env_method = env::var("TERMLIBS_METHOD")
+      .ok()
+      .map(|v| InstallMethod::from(v.as_str()));
     let env_download_only = env::var("TERMLIBS_DOWNLOAD_ONLY").ok().map(is_truthy);
     let env_force = env::var("TERMLIBS_FORCE").ok().map(is_truthy);
     let env_quiet = env::var("TERMLIBS_QUIET").ok().map(is_truthy);
@@ -228,7 +243,11 @@ impl NativeInstallPlan {
       .unwrap_or_else(host_arch);
     let version = args.version.clone().or(env_version);
     let prefix = args.prefix.clone().or(env_prefix);
-    let method = args.method.as_ref().map(|v| InstallMethod::from(v.as_str())).or(env_method);
+    let method = args
+      .method
+      .as_ref()
+      .map(|v| InstallMethod::from(v.as_str()))
+      .or(env_method);
     let download_only = Some(args.download_only).or(env_download_only);
     let force = Some(args.force).or(env_force);
     let quiet = Some(args.quiet).or(env_quiet);
@@ -264,10 +283,13 @@ impl NativeInstallPlan {
     Ok(Self { target, query })
   }
 
-  async fn resolve_links(&self) -> Result<(Vec<crate::supported_apps::DownloadInfo>, Vec<String>), AppError> {
+  async fn resolve_links(
+    &self,
+  ) -> Result<(Vec<crate::supported_apps::DownloadInfo>, Vec<String>), AppError> {
     let supported_app = match &self.target {
-      InstallTarget::SupportedApp(app) => supported_apps::get_app(app)
-        .ok_or_else(|| AppError::UnsupportedApp(app.to_string()))?,
+      InstallTarget::SupportedApp(app) => {
+        supported_apps::get_app(app).ok_or_else(|| AppError::UnsupportedApp(app.to_string()))?
+      }
       InstallTarget::Github { owner, repo } => {
         let name = format!("{}/{}", owner, repo);
         SupportedApp::new(&name, Repo::github(&name), "github")
@@ -292,7 +314,10 @@ impl NativeInstallPlan {
 }
 
 fn is_truthy(value: String) -> bool {
-  matches!(value.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on")
+  matches!(
+    value.to_ascii_lowercase().as_str(),
+    "1" | "true" | "yes" | "on"
+  )
 }
 
 fn create_tempdir() -> Result<PathBuf, AppError> {
@@ -303,14 +328,20 @@ fn create_tempdir() -> Result<PathBuf, AppError> {
     .unwrap_or(0);
   path.push(format!("termlibs-{}-{}", std::process::id(), millis));
   fs::create_dir_all(&path).map_err(|err| {
-    AppError::InvalidInput(format!("failed to create temp dir {}: {}", path.display(), err))
+    AppError::InvalidInput(format!(
+      "failed to create temp dir {}: {}",
+      path.display(),
+      err
+    ))
   })?;
   Ok(path)
 }
 
 fn prompt_for_choice(labels: &[String]) -> Result<usize, AppError> {
   if labels.is_empty() {
-    return Err(AppError::InvalidInput("no artifacts available to select".to_string()));
+    return Err(AppError::InvalidInput(
+      "no artifacts available to select".to_string(),
+    ));
   }
 
   ct_write_line(style("Please select one of the following:").with(Color::Yellow))?;
@@ -327,17 +358,34 @@ fn prompt_for_choice(labels: &[String]) -> Result<usize, AppError> {
   let defaulted = trimmed.is_empty();
   let trimmed = if defaulted { "1" } else { trimmed };
   let choice_one_based: usize = trimmed.parse().map_err(|_| {
-    AppError::InvalidInput(format!("invalid choice '{}', expected 1-{}", trimmed, labels.len()))
+    AppError::InvalidInput(format!(
+      "invalid choice '{}', expected 1-{}",
+      trimmed,
+      labels.len()
+    ))
   })?;
   if choice_one_based == 0 || choice_one_based > labels.len() {
-    return Err(AppError::InvalidInput(format!("choice out of range: {}", choice_one_based)));
+    return Err(AppError::InvalidInput(format!(
+      "choice out of range: {}",
+      choice_one_based
+    )));
   }
   Ok(choice_one_based - 1)
 }
 
-fn prompt_destination(label: &str, default_dir: &Path, default_name: &str) -> Result<(PathBuf, String), AppError> {
+fn prompt_destination(
+  label: &str,
+  default_dir: &Path,
+  default_name: &str,
+) -> Result<(PathBuf, String), AppError> {
   ct_write_line(style(format!("Selected file: {}", label)).with(Color::Yellow))?;
-  ct_write(style(format!("Enter install directory [default: {}]: ", default_dir.display())).with(Color::Green))?;
+  ct_write(
+    style(format!(
+      "Enter install directory [default: {}]: ",
+      default_dir.display()
+    ))
+    .with(Color::Green),
+  )?;
 
   let mut dir_input = String::new();
   io::stdin()
@@ -378,7 +426,10 @@ fn is_probably_binary(content_type: &Mime) -> bool {
   )
 }
 
-fn default_binary_name(target: &InstallTarget, link: &crate::supported_apps::DownloadInfo) -> String {
+fn default_binary_name(
+  target: &InstallTarget,
+  link: &crate::supported_apps::DownloadInfo,
+) -> String {
   let ext = Path::new(&link.name)
     .extension()
     .map(|e| format!(".{}", e.to_string_lossy()))
@@ -403,12 +454,20 @@ fn is_archive(content_type: &Mime, name: &str) -> bool {
     || lower_name.ends_with(".tar.xz")
 }
 
-async fn download_asset(url: &url::Url, tempdir: &Path, filename: &str) -> Result<PathBuf, AppError> {
+async fn download_asset(
+  url: &url::Url,
+  tempdir: &Path,
+  filename: &str,
+) -> Result<PathBuf, AppError> {
   let resp = reqwest::get(url.as_str())
     .await
     .map_err(|err| AppError::InvalidInput(format!("failed to download {}: {}", url, err)))?;
   if !resp.status().is_success() {
-    return Err(AppError::InvalidInput(format!("download failed for {}: status {}", url, resp.status())));
+    return Err(AppError::InvalidInput(format!(
+      "download failed for {}: status {}",
+      url,
+      resp.status()
+    )));
   }
   let bytes = resp
     .bytes()
@@ -416,8 +475,9 @@ async fn download_asset(url: &url::Url, tempdir: &Path, filename: &str) -> Resul
     .map_err(|err| AppError::InvalidInput(format!("failed to read body {}: {}", url, err)))?;
   let mut path = tempdir.to_path_buf();
   path.push(filename);
-  fs::write(&path, &bytes)
-    .map_err(|err| AppError::InvalidInput(format!("failed to write {}: {}", path.display(), err)))?;
+  fs::write(&path, &bytes).map_err(|err| {
+    AppError::InvalidInput(format!("failed to write {}: {}", path.display(), err))
+  })?;
   Ok(path)
 }
 
@@ -427,10 +487,12 @@ fn list_archive_entries(path: &Path) -> Result<Vec<String>, AppError> {
     .map(|e| e.to_string_lossy().to_ascii_lowercase())
     .unwrap_or_default();
   if lower == "zip" {
-    let file = File::open(path)
-      .map_err(|err| AppError::InvalidInput(format!("failed to open {}: {}", path.display(), err)))?;
-    let mut archive = ZipArchive::new(file)
-      .map_err(|err| AppError::InvalidInput(format!("failed to read zip {}: {}", path.display(), err)))?;
+    let file = File::open(path).map_err(|err| {
+      AppError::InvalidInput(format!("failed to open {}: {}", path.display(), err))
+    })?;
+    let mut archive = ZipArchive::new(file).map_err(|err| {
+      AppError::InvalidInput(format!("failed to read zip {}: {}", path.display(), err))
+    })?;
     let mut entries = Vec::new();
     for i in 0..archive.len() {
       let file = archive
@@ -442,14 +504,22 @@ fn list_archive_entries(path: &Path) -> Result<Vec<String>, AppError> {
     return Ok(limit_depth(entries, 2));
   }
 
-  if lower == "gz" || path.to_string_lossy().ends_with(".tar.gz") || path.to_string_lossy().ends_with(".tgz") {
-    let file = File::open(path)
-      .map_err(|err| AppError::InvalidInput(format!("failed to open {}: {}", path.display(), err)))?;
+  if lower == "gz"
+    || path.to_string_lossy().ends_with(".tar.gz")
+    || path.to_string_lossy().ends_with(".tgz")
+  {
+    let file = File::open(path).map_err(|err| {
+      AppError::InvalidInput(format!("failed to open {}: {}", path.display(), err))
+    })?;
     let decoder = GzDecoder::new(file);
     let mut archive = Archive::new(decoder);
     let mut entries = Vec::new();
-    for entry in archive.entries().map_err(|err| AppError::InvalidInput(format!("failed to read tar: {}", err)))? {
-      let entry = entry.map_err(|err| AppError::InvalidInput(format!("failed to read tar entry: {}", err)))?;
+    for entry in archive
+      .entries()
+      .map_err(|err| AppError::InvalidInput(format!("failed to read tar: {}", err)))?
+    {
+      let entry = entry
+        .map_err(|err| AppError::InvalidInput(format!("failed to read tar entry: {}", err)))?;
       let path = entry
         .path()
         .map_err(|err| AppError::InvalidInput(format!("failed to read tar path: {}", err)))?;
@@ -460,12 +530,17 @@ fn list_archive_entries(path: &Path) -> Result<Vec<String>, AppError> {
   }
 
   if lower == "tar" {
-    let file = File::open(path)
-      .map_err(|err| AppError::InvalidInput(format!("failed to open {}: {}", path.display(), err)))?;
+    let file = File::open(path).map_err(|err| {
+      AppError::InvalidInput(format!("failed to open {}: {}", path.display(), err))
+    })?;
     let mut archive = Archive::new(file);
     let mut entries = Vec::new();
-    for entry in archive.entries().map_err(|err| AppError::InvalidInput(format!("failed to read tar: {}", err)))? {
-      let entry = entry.map_err(|err| AppError::InvalidInput(format!("failed to read tar entry: {}", err)))?;
+    for entry in archive
+      .entries()
+      .map_err(|err| AppError::InvalidInput(format!("failed to read tar: {}", err)))?
+    {
+      let entry = entry
+        .map_err(|err| AppError::InvalidInput(format!("failed to read tar entry: {}", err)))?;
       let path = entry
         .path()
         .map_err(|err| AppError::InvalidInput(format!("failed to read tar path: {}", err)))?;
@@ -475,7 +550,9 @@ fn list_archive_entries(path: &Path) -> Result<Vec<String>, AppError> {
     return Ok(limit_depth(entries, 2));
   }
 
-  Err(AppError::InvalidInput("unsupported archive format".to_string()))
+  Err(AppError::InvalidInput(
+    "unsupported archive format".to_string(),
+  ))
 }
 
 fn limit_depth(entries: Vec<String>, depth: usize) -> Vec<String> {
@@ -502,43 +579,70 @@ fn render_tree(entries: &[String]) -> Result<(), AppError> {
   Ok(())
 }
 
-fn extract_archive_entry(archive_path: &Path, entry_name: &str, tempdir: &Path) -> Result<PathBuf, AppError> {
+fn extract_archive_entry(
+  archive_path: &Path,
+  entry_name: &str,
+  tempdir: &Path,
+) -> Result<PathBuf, AppError> {
   let lower = archive_path
     .extension()
     .map(|e| e.to_string_lossy().to_ascii_lowercase())
     .unwrap_or_default();
 
   if lower == "zip" {
-    let file = File::open(archive_path)
-      .map_err(|err| AppError::InvalidInput(format!("failed to open {}: {}", archive_path.display(), err)))?;
-    let mut archive = ZipArchive::new(file)
-      .map_err(|err| AppError::InvalidInput(format!("failed to read zip {}: {}", archive_path.display(), err)))?;
-    let mut zip_file = archive
-      .by_name(entry_name)
-      .map_err(|err| AppError::InvalidInput(format!("failed to open zip entry {}: {}", entry_name, err)))?;
+    let file = File::open(archive_path).map_err(|err| {
+      AppError::InvalidInput(format!(
+        "failed to open {}: {}",
+        archive_path.display(),
+        err
+      ))
+    })?;
+    let mut archive = ZipArchive::new(file).map_err(|err| {
+      AppError::InvalidInput(format!(
+        "failed to read zip {}: {}",
+        archive_path.display(),
+        err
+      ))
+    })?;
+    let mut zip_file = archive.by_name(entry_name).map_err(|err| {
+      AppError::InvalidInput(format!("failed to open zip entry {}: {}", entry_name, err))
+    })?;
     let file_name = Path::new(entry_name)
       .file_name()
       .map(|f| f.to_string_lossy().to_string())
       .unwrap_or_else(|| entry_name.to_string());
     let mut out_path = tempdir.to_path_buf();
     out_path.push(file_name);
-    let mut out = File::create(&out_path)
-      .map_err(|err| AppError::InvalidInput(format!("failed to create {}: {}", out_path.display(), err)))?;
-    io::copy(&mut zip_file, &mut out)
-      .map_err(|err| AppError::InvalidInput(format!("failed to extract {}: {}", entry_name, err)))?;
+    let mut out = File::create(&out_path).map_err(|err| {
+      AppError::InvalidInput(format!("failed to create {}: {}", out_path.display(), err))
+    })?;
+    io::copy(&mut zip_file, &mut out).map_err(|err| {
+      AppError::InvalidInput(format!("failed to extract {}: {}", entry_name, err))
+    })?;
     return Ok(out_path);
   }
 
-  let is_gzip = lower == "gz" || archive_path.to_string_lossy().ends_with(".tar.gz") || archive_path.to_string_lossy().ends_with(".tgz");
+  let is_gzip = lower == "gz"
+    || archive_path.to_string_lossy().ends_with(".tar.gz")
+    || archive_path.to_string_lossy().ends_with(".tgz");
   let is_tar = lower == "tar" || is_gzip;
   if is_tar {
-    let file = File::open(archive_path)
-      .map_err(|err| AppError::InvalidInput(format!("failed to open {}: {}", archive_path.display(), err)))?;
+    let file = File::open(archive_path).map_err(|err| {
+      AppError::InvalidInput(format!(
+        "failed to open {}: {}",
+        archive_path.display(),
+        err
+      ))
+    })?;
     if is_gzip {
       let decoder = GzDecoder::new(file);
       let mut archive = Archive::new(decoder);
-      for entry in archive.entries().map_err(|err| AppError::InvalidInput(format!("failed to read tar: {}", err)))? {
-        let mut entry = entry.map_err(|err| AppError::InvalidInput(format!("failed to read tar entry: {}", err)))?;
+      for entry in archive
+        .entries()
+        .map_err(|err| AppError::InvalidInput(format!("failed to read tar: {}", err)))?
+      {
+        let mut entry = entry
+          .map_err(|err| AppError::InvalidInput(format!("failed to read tar entry: {}", err)))?;
         let path = entry
           .path()
           .map_err(|err| AppError::InvalidInput(format!("failed to read tar path: {}", err)))?;
@@ -550,17 +654,23 @@ fn extract_archive_entry(archive_path: &Path, entry_name: &str, tempdir: &Path) 
             .unwrap_or_else(|| entry_name.to_string());
           let mut out_path = tempdir.to_path_buf();
           out_path.push(file_name);
-          let mut out = File::create(&out_path)
-            .map_err(|err| AppError::InvalidInput(format!("failed to create {}: {}", out_path.display(), err)))?;
-          io::copy(&mut entry, &mut out)
-            .map_err(|err| AppError::InvalidInput(format!("failed to extract {}: {}", entry_name, err)))?;
+          let mut out = File::create(&out_path).map_err(|err| {
+            AppError::InvalidInput(format!("failed to create {}: {}", out_path.display(), err))
+          })?;
+          io::copy(&mut entry, &mut out).map_err(|err| {
+            AppError::InvalidInput(format!("failed to extract {}: {}", entry_name, err))
+          })?;
           return Ok(out_path);
         }
       }
     } else {
       let mut archive = Archive::new(file);
-      for entry in archive.entries().map_err(|err| AppError::InvalidInput(format!("failed to read tar: {}", err)))? {
-        let mut entry = entry.map_err(|err| AppError::InvalidInput(format!("failed to read tar entry: {}", err)))?;
+      for entry in archive
+        .entries()
+        .map_err(|err| AppError::InvalidInput(format!("failed to read tar: {}", err)))?
+      {
+        let mut entry = entry
+          .map_err(|err| AppError::InvalidInput(format!("failed to read tar entry: {}", err)))?;
         let path = entry
           .path()
           .map_err(|err| AppError::InvalidInput(format!("failed to read tar path: {}", err)))?;
@@ -572,27 +682,36 @@ fn extract_archive_entry(archive_path: &Path, entry_name: &str, tempdir: &Path) 
             .unwrap_or_else(|| entry_name.to_string());
           let mut out_path = tempdir.to_path_buf();
           out_path.push(file_name);
-          let mut out = File::create(&out_path)
-            .map_err(|err| AppError::InvalidInput(format!("failed to create {}: {}", out_path.display(), err)))?;
-          io::copy(&mut entry, &mut out)
-            .map_err(|err| AppError::InvalidInput(format!("failed to extract {}: {}", entry_name, err)))?;
+          let mut out = File::create(&out_path).map_err(|err| {
+            AppError::InvalidInput(format!("failed to create {}: {}", out_path.display(), err))
+          })?;
+          io::copy(&mut entry, &mut out).map_err(|err| {
+            AppError::InvalidInput(format!("failed to extract {}: {}", entry_name, err))
+          })?;
           return Ok(out_path);
         }
       }
     }
-    return Err(AppError::InvalidInput(format!("entry not found in archive: {}", entry_name)));
+    return Err(AppError::InvalidInput(format!(
+      "entry not found in archive: {}",
+      entry_name
+    )));
   }
 
-  Err(AppError::InvalidInput("unsupported archive format".to_string()))
+  Err(AppError::InvalidInput(
+    "unsupported archive format".to_string(),
+  ))
 }
 
 fn finalize_install(source: &Path, dest_dir: &Path, dest_name: &str) -> Result<PathBuf, AppError> {
-  fs::create_dir_all(dest_dir)
-    .map_err(|err| AppError::InvalidInput(format!("failed to create {}: {}", dest_dir.display(), err)))?;
+  fs::create_dir_all(dest_dir).map_err(|err| {
+    AppError::InvalidInput(format!("failed to create {}: {}", dest_dir.display(), err))
+  })?;
   let mut dest = dest_dir.to_path_buf();
   dest.push(dest_name);
-  fs::copy(source, &dest)
-    .map_err(|err| AppError::InvalidInput(format!("failed to copy to {}: {}", dest.display(), err)))?;
+  fs::copy(source, &dest).map_err(|err| {
+    AppError::InvalidInput(format!("failed to copy to {}: {}", dest.display(), err))
+  })?;
   Ok(dest)
 }
 
