@@ -102,6 +102,7 @@ impl Display for TargetOs {
 }
 
 #[derive(PartialEq, Debug, Serialize, ToSchema, Clone)]
+#[allow(non_camel_case_types)]
 pub(crate) enum TargetArch {
   Amd64,
   Arm64,

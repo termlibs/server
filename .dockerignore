@@ -2,5 +2,7 @@
 !src/
 !static/
 !Cargo.toml
+!Cargo.lock
 !favicon.ico
 !templates/
+!xtask/
