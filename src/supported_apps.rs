@@ -9,6 +9,16 @@ use std::fmt::Display;
 use std::sync::LazyLock;
 use url::Url;
 
+macro_rules! safe_int_cast {
+  ($val:expr, $target_type:ty) => {{
+    if $val < 0 {
+      0 as $target_type
+    } else {
+      $val as $target_type
+    }
+  }};
+}
+
 const GITHUB_API: &str = "https://api.github.com";
 
 pub(crate) fn get_app(name: &str) -> Option<SupportedApp> {
@@ -19,6 +29,7 @@ pub(crate) fn get_app(name: &str) -> Option<SupportedApp> {
 pub(crate) struct SupportedApp {
   pub(crate) shortname: String,
   pub(crate) repo: Repo,
+  #[allow(dead_code)]
   pub(crate) source: String,
 }
 
@@ -57,7 +68,9 @@ static SUPPORTED_APPS: LazyLock<HashMap<&str, SupportedApp>> = LazyLock::new(|| 
 #[derive(Debug, Clone, PartialOrd, PartialEq)]
 pub(crate) enum Repo {
   Github(String),
+  #[allow(dead_code)]
   Url(String),
+  #[allow(dead_code)]
   Python(String),
 }
 
@@ -66,10 +79,12 @@ impl Repo {
     Self::Github(format!("{}/repos/{}", GITHUB_API, repo))
   }
 
+  #[allow(dead_code)]
   fn url(url: &str) -> Self {
     Self::Url(url.to_string())
   }
 
+  #[allow(dead_code)]
   fn python(app: &str) -> Self {
     Self::Python(format!("https://pypi.org/simple/{}", app))
   }
@@ -93,6 +108,7 @@ impl Repo {
     )
   }
 
+  #[allow(dead_code)]
   pub(crate) async fn get_download_link(
     &self,
     version: &str,
@@ -128,12 +144,15 @@ impl DownloadInfo {
       .content_type
       .parse::<Mime>()
       .unwrap_or(mime::APPLICATION_OCTET_STREAM);
+
+    let size = safe_int_cast!(asset.size, u64);
+
     Self {
       name: asset.name.clone(),
       label: asset.label.to_owned().unwrap_or("".to_string()),
       url: asset.browser_download_url.clone(),
       content_type: mime.to_owned(),
-      size: asset.size as u64,
+      size,
       target: Target::identify(&asset.name, Some(&mime)),
     }
   }

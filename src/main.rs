@@ -16,10 +16,11 @@ use std::net::SocketAddr;
 use tower_http::cors::CorsLayer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+mod config;
 mod domain;
 mod error;
-mod providers;
 mod http;
+mod providers;
 mod services;
 mod static_site;
 mod supported_apps;
@@ -69,7 +70,14 @@ fn setup_logger(log_level: &str) -> Result<(), fern::InitError> {
 }
 
 async fn favicon() -> impl IntoResponse {
-  (StatusCode::OK, [("Content-Type", "image/x-icon")], FAVICON)
+  (
+    StatusCode::OK,
+    [
+      ("Content-Type", "image/x-icon"),
+      ("Cache-Control", "public, max-age=86400"),
+    ],
+    FAVICON,
+  )
 }
 
 #[utoipa::path(
@@ -95,7 +103,8 @@ async fn install_arbitrary_github_handler(
     "install_arbitrary_github_handler({:?}, {:?}) with {:#?}",
     user, repo, q
   );
-  installer::build_arbitrary_github_install_script(&user, &repo, &mut q, accepts_html(&headers)).await
+  installer::build_arbitrary_github_install_script(&user, &repo, &mut q, accepts_html(&headers))
+    .await
 }
 
 #[utoipa::path(
@@ -125,7 +134,10 @@ async fn install_handler(
 }
 
 async fn install_latest_redirect(uri: Uri) -> Redirect {
-  let path_and_query = uri.path_and_query().map(|v| v.as_str()).unwrap_or(uri.path());
+  let path_and_query = uri
+    .path_and_query()
+    .map(|v| v.as_str())
+    .unwrap_or(uri.path());
   Redirect::temporary(&format!("{LATEST_API_PREFIX}{path_and_query}"))
 }
 
@@ -137,16 +149,16 @@ fn accepts_html(headers: &HeaderMap) -> bool {
     .unwrap_or(false)
 }
 
-async fn root_handler() -> impl IntoResponse {
+async fn root_handler() -> Result<Html<String>, AppError> {
   info!("{:?}", "root");
   info!("{:?}", TERMLIBS_ROOT);
-  let html = static_site::load_static("index.html").unwrap_or("".to_string());
-  Html(html)
+  let html = static_site::load_static("index.html")
+    .ok_or_else(|| AppError::InvalidInput("index.html not found".to_string()))?;
+  Ok(Html(html))
 }
 
 async fn not_found_handler() -> impl IntoResponse {
-  let html =
-    static_site::load_static("404.html").unwrap_or("<h1>404 Not Found</h1>".to_string());
+  let html = static_site::load_static("404.html").unwrap_or("<h1>404 Not Found</h1>".to_string());
   (StatusCode::NOT_FOUND, Html(html))
 }
 
@@ -164,11 +176,7 @@ async fn log_requests_middleware(request: Request, next: Next) -> impl IntoRespo
   if LOG_REQUESTS_SKIP_PATHS.contains(&uri.path()) {
     return next.run(request).await;
   }
-  debug!(
-    "{} {} -> (received)",
-    method,
-    uri,
-  );
+  debug!("{} {} -> (received)", method, uri,);
   let started = Instant::now();
   let response = next.run(request).await;
   let status = response.status();
@@ -214,19 +222,19 @@ struct ApiDoc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+  let log_level = env::var("LOG_LEVEL").unwrap_or("INFO".into());
+  setup_logger(log_level.as_str()).context("failed to initialize logger")?;
+
+  // Load config (also initializes lazy static CONFIG)
+  let config = &config::CONFIG;
+
   // make sure the templates are loaded early to check for errors
   TEMPLATES.get_template_names().for_each(|name| {
     info!("template loaded: {}", name);
   });
 
-  let port = env::var("PORT")
-    .unwrap_or("8080".to_string())
-    .parse::<u16>()
-    .with_context(|| "invalid PORT value; expected u16".to_string())?;
-  let log_level = env::var("LOG_LEVEL").unwrap_or("DEBUG".to_string());
-  let listen_ip: String = env::var("LISTEN").unwrap_or("0.0.0.0".to_string());
-
-  setup_logger(log_level.as_str()).context("failed to initialize logger")?;
+  let listen_ip = env::var("LISTEN_IP").unwrap_or(config.server.host.clone());
+  let port = env::var("PORT").unwrap_or(config.server.port.to_string());
 
   info!("starting server at {:?}:{}", listen_ip, port);
 

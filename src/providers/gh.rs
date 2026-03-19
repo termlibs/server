@@ -1,36 +1,81 @@
+use crate::config::CONFIG;
 use crate::domain::platform::TargetDeployment;
 use crate::error::AppError;
 use crate::supported_apps::{DownloadInfo, Repo};
 use log::debug;
+use moka::future::Cache;
 use octocrab::models::repos::Release;
-use octocrab::OctocrabBuilder;
+use octocrab::{Octocrab, OctocrabBuilder};
+use std::sync::{Arc, LazyLock};
+use std::time::Duration;
 
 const MIN_ASSET_SIZE: u64 = 64 * 1024; // arbitrary, may need to change if we start installing scripts
 
+// Cache key: (owner, repo, version)
+type CacheKey = (String, String, String);
+
+static RELEASE_CACHE: LazyLock<Cache<CacheKey, Release>> = LazyLock::new(|| {
+  let cache_config = &CONFIG.cache.github_releases;
+  Cache::builder()
+    .max_capacity(cache_config.max_capacity)
+    .time_to_live(Duration::from_secs(cache_config.ttl_seconds))
+    .build()
+});
+
+static OCTOCRAB: LazyLock<Arc<Octocrab>> = LazyLock::new(|| {
+  Arc::new(
+    OctocrabBuilder::default()
+      .build()
+      .expect("Failed to build Octocrab client"),
+  )
+});
 
 pub(crate) async fn get_github_download_links(
   repo: &Repo,
   target_deployment: &TargetDeployment,
   version: &str,
 ) -> Result<Vec<DownloadInfo>, AppError> {
-  let octocrab = OctocrabBuilder::default().build().map_err(AppError::from)?;
   let repo_string = repo.get_github_repo()?;
   let (owner, repo_name) = repo_string
     .split_once('/')
     .ok_or_else(|| AppError::InvalidInput(format!("Invalid github repo path: {}", repo_string)))?;
-  let repo = octocrab.repos(owner, repo_name);
-  let releases = repo.releases();
-  let release: Release;
+
+  let cache_key = (
+    owner.to_string(),
+    repo_name.to_string(),
+    version.to_string(),
+  );
 
   debug!("checking for release '{}' from {:?}", version, repo_string);
-  match version {
-    "latest" => {
-      release = releases.get_latest().await?;
-    }
-    _ => {
-      release = releases.get_by_tag(version).await?;
-    }
-  }
+
+  // Try to get from cache first
+  let release = if let Some(cached) = RELEASE_CACHE.get(&cache_key).await {
+    debug!("cache hit for {}/{} version {}", owner, repo_name, version);
+    cached
+  } else {
+    debug!("cache miss for {}/{} version {}", owner, repo_name, version);
+    let repo = OCTOCRAB.repos(owner, repo_name);
+    let releases = repo.releases();
+
+    let timeout_secs = CONFIG.github.api_timeout_seconds;
+    let release = tokio::time::timeout(Duration::from_secs(timeout_secs), async {
+      match version {
+        "latest" => releases.get_latest().await,
+        _ => releases.get_by_tag(version).await,
+      }
+    })
+    .await
+    .map_err(|_| {
+      AppError::UpstreamGithub(format!(
+        "GitHub API request timed out after {} seconds",
+        timeout_secs
+      ))
+    })??;
+
+    // Store in cache
+    RELEASE_CACHE.insert(cache_key, release.clone()).await;
+    release
+  };
 
   let mut matched = vec![];
   let skippable_extensions = [
@@ -98,7 +143,7 @@ pub(crate) async fn get_github_download_links(
   Ok(matched)
 }
 
-fn calc_all_widths(download_infos: &Vec<DownloadInfo>) -> (usize, usize, usize, usize, usize) {
+fn calc_all_widths(download_infos: &[DownloadInfo]) -> (usize, usize, usize, usize, usize) {
   let calc_width =
     |values: Vec<String>| -> usize { values.iter().map(String::len).max().unwrap_or(0).min(32) };
   let name_width = calc_width(
@@ -215,7 +260,9 @@ mod tests {
               eprintln!(
                 "transient github error on attempt {}/3 for '{}': {}. retrying...",
                 attempt,
-                repo.get_github_repo().unwrap_or_else(|_| "<unknown>".to_string()),
+                repo
+                  .get_github_repo()
+                  .unwrap_or_else(|_| "<unknown>".to_string()),
                 message
               );
               sleep(Duration::from_secs(2)).await;
@@ -232,7 +279,10 @@ mod tests {
             let err = last_error.unwrap_or_else(|| {
               AppError::UpstreamGithub("retries exhausted without result".to_string())
             });
-            panic!("known app config should resolve latest release lookup: {:?}", err);
+            panic!(
+              "known app config should resolve latest release lookup: {:?}",
+              err
+            );
           }
         }
       };

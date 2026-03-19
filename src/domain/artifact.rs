@@ -127,6 +127,7 @@ pub(crate) enum ScriptType {
 }
 
 impl ScriptType {
+  #[allow(dead_code)]
   fn identify(input: &str) -> Option<ScriptType> {
     let extensions = &get_extensions(input);
     if extensions.is_empty() {

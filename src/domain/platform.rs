@@ -101,7 +101,8 @@ impl Display for TargetOs {
   }
 }
 
-#[derive(PartialEq, Debug, Serialize, ToSchema, Clone)]
+#[derive(PartialEq, Eq, Debug, Serialize, ToSchema, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub(crate) enum TargetArch {
   Amd64,
   Arm64,
@@ -149,6 +150,7 @@ impl Display for TargetArch {
 
 impl TargetArch {
   fn identify(input: &str) -> TargetArch {
+    let input = input.to_lowercase();
     let amd = ["amd64", "x64", "x86_64"];
     let x86 = ["x86", "i386", "i686", "x86_32", "386", "686", "ia32"];
     let arm = ["arm64"];
@@ -242,6 +244,119 @@ impl Default for TargetDeployment {
     TargetDeployment {
       os: TargetOs::Linux,
       arch: TargetArch::Amd64,
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn arm_and_aarch_display_preserve_spelling() {
+    assert_eq!(TargetArch::Arm64.to_string(), "arm64");
+    assert_eq!(TargetArch::Aarch64.to_string(), "aarch64");
+  }
+
+  #[test]
+  fn target_os_identify_variants() {
+    assert_eq!(TargetOs::identify("linux"), TargetOs::Linux);
+    assert_eq!(TargetOs::identify("LINUX_AMD64"), TargetOs::Linux);
+    assert_eq!(TargetOs::identify("darwin"), TargetOs::Mac);
+    assert_eq!(TargetOs::identify("osx"), TargetOs::Mac);
+    assert_eq!(TargetOs::identify("win64"), TargetOs::Windows);
+    assert_eq!(TargetOs::identify("freebsd"), TargetOs::Freebsd);
+    assert_eq!(TargetOs::identify("openbsd"), TargetOs::Openbsd);
+    assert_eq!(TargetOs::identify("netbsd"), TargetOs::Netbsd);
+    assert_eq!(TargetOs::identify("unknownos"), TargetOs::Unknown);
+  }
+
+  #[test]
+  fn target_arch_identify_common_names() {
+    assert_eq!(TargetArch::identify("amd64"), TargetArch::Amd64);
+    assert_eq!(TargetArch::identify("x86_64"), TargetArch::Amd64);
+    assert_eq!(TargetArch::identify("arm64"), TargetArch::Arm64);
+    assert_eq!(TargetArch::identify("aarch64"), TargetArch::Aarch64);
+    assert_eq!(TargetArch::identify("ppc64"), TargetArch::PPC);
+    assert_eq!(TargetArch::identify("ppc64le"), TargetArch::PPCLe);
+    assert_eq!(TargetArch::identify("mips"), TargetArch::Mips);
+    assert_eq!(TargetArch::identify("mips64"), TargetArch::Mips64);
+    assert_eq!(TargetArch::identify("mips64le"), TargetArch::Mips64Le);
+    assert_eq!(TargetArch::identify("386"), TargetArch::x86);
+    assert_eq!(TargetArch::identify("i686"), TargetArch::x86);
+    assert_eq!(TargetArch::identify("riscv64"), TargetArch::RiscV);
+  }
+
+  #[test]
+  fn target_arch_identify_full_filenames() {
+    assert_eq!(
+      TargetArch::identify("gh_2.0.0_linux_amd64.tar.gz"),
+      TargetArch::Amd64
+    );
+    assert_eq!(
+      TargetArch::identify("gh_2.0.0_linux_arm64.tar.gz"),
+      TargetArch::Arm64
+    );
+    assert_eq!(TargetArch::identify("jq-linux64"), TargetArch::Amd64);
+    assert_eq!(
+      TargetArch::identify("shellcheck-v0.9.0.darwin.aarch64.tar.gz"),
+      TargetArch::Aarch64
+    );
+    assert_eq!(
+      TargetArch::identify("yq_freebsd_386.tar.gz"),
+      TargetArch::x86
+    );
+    assert_eq!(
+      TargetArch::identify("tool-openbsd-riscv64"),
+      TargetArch::RiscV
+    );
+  }
+
+  #[test]
+  fn target_deployment_identify_end_to_end() {
+    struct Case<'a> {
+      input: &'a str,
+      os: TargetOs,
+      arch: TargetArch,
+    }
+
+    let cases = vec![
+      Case {
+        input: "yq_linux_amd64",
+        os: TargetOs::Linux,
+        arch: TargetArch::Amd64,
+      },
+      Case {
+        input: "yq-darwin-aarch64",
+        os: TargetOs::Mac,
+        arch: TargetArch::Aarch64,
+      },
+      Case {
+        input: "yq-windows-arm64",
+        os: TargetOs::Windows,
+        arch: TargetArch::Arm64,
+      },
+      Case {
+        input: "yq-freebsd_386.tar.gz",
+        os: TargetOs::Freebsd,
+        arch: TargetArch::x86,
+      },
+      Case {
+        input: "yq-openbsd-riscv64",
+        os: TargetOs::Openbsd,
+        arch: TargetArch::RiscV,
+      },
+      Case {
+        input: "yq-netbsd-mips64le",
+        os: TargetOs::Netbsd,
+        arch: TargetArch::Mips64Le,
+      },
+    ];
+
+    for c in cases {
+      let deployment = TargetDeployment::identify(c.input);
+      assert_eq!(deployment.os, c.os, "os mismatch for {}", c.input);
+      assert_eq!(deployment.arch, c.arch, "arch mismatch for {}", c.input);
     }
   }
 }

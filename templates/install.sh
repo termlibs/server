@@ -72,7 +72,7 @@ _ask_choices() {
   fi
 
   printf "Enter choice: " 1>&2
-  read -r choice
+  read -r choice </dev/tty
 
   local final_choices=()
   for c in $choice; do
@@ -159,12 +159,12 @@ case "$_type" in
       chmod +x "$saved_file"
 
       if [ -z "$_CANONICAL_BINARY_NAME" ]; then
-        read -r -p "enter alternate binary name (default: $filename): " binary_name
+        read -r -p "enter alternate binary name (default: $filename): " binary_name </dev/tty
         binary_name="${binary_name:-$filename}"
       else
         binary_name="$_CANONICAL_BINARY_NAME"
       fi
-      read -r -p "enter alternate binary directory (default: $RUN_DIRECTORY/bin): " binary_dir
+      read -r -p "enter alternate binary directory (default: $RUN_DIRECTORY/bin): " binary_dir </dev/tty
       binary_dir="${binary_dir:-$RUN_DIRECTORY/bin}"
       mkdir -p "$binary_dir"
       cp "$saved_file" "$binary_dir/$binary_name"
@@ -185,12 +185,12 @@ case "$_type" in
       printf "no executable files found in archive\n" >&2
       exit 100
     else
-      choices="$(_ask_choices --quit ${executable_files[@]})"
+      choices="$(_ask_choices --quit "${executable_files[@]}")"
     fi
     for choice in $choices; do
       case "$choice" in
         [0-9]*)
-          cp ${executable_files[$choice]} "$RUN_DIRECTORY/bin"
+          cp "${executable_files[$choice]}" "$RUN_DIRECTORY/bin"
           ;;
       esac
     done

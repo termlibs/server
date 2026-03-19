@@ -25,7 +25,7 @@ pub(crate) struct ScriptResponse {
 impl ScriptResponse {
   pub(crate) fn new(filename: String, body: String, inline: bool, html: bool) -> ScriptResponse {
     let body_size = body.len();
-    let shell_name = match filename.split('.').last().unwrap() {
+    let shell_name = match filename.split('.').next_back().unwrap() {
       "sh" => "sh",
       "ps1" => "powershell",
       _ => "sh",

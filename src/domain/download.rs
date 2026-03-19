@@ -1,5 +1,5 @@
-use crate::domain::artifact::{ArchiveType, Filetype};
-use crate::domain::platform::{TargetArch, TargetDeployment, TargetOs};
+use crate::domain::artifact::Filetype;
+use crate::domain::platform::TargetDeployment;
 use mime::Mime;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -17,19 +17,13 @@ impl Target {
       filetype: Filetype::identify(input, content_type),
     }
   }
-
-  pub(crate) fn new(os: TargetOs, arch: TargetArch, filetype: Filetype) -> Target {
-    Target {
-      deployment: TargetDeployment { os, arch },
-      filetype,
-    }
-  }
 }
-
 
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::domain::artifact::ArchiveType;
+  use crate::domain::platform::{TargetArch, TargetOs};
 
   struct Itc {
     input: String,
