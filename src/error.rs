@@ -70,6 +70,12 @@ impl AppError {
   }
 }
 
+impl std::fmt::Display for AppError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}: {}", self.code(), self.message())
+  }
+}
+
 #[derive(Serialize)]
 struct ErrorBody {
   error: &'static str,

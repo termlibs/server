@@ -1,5 +1,3 @@
-extern crate core;
-
 use anyhow::Context;
 use axum::{
   extract::{Path, Query, Request},
@@ -199,7 +197,7 @@ async fn log_requests_middleware(request: Request, next: Next) -> impl IntoRespo
 #[openapi(
   info(
     title = "Termlibs API",
-    version = "0.4.0",
+    version = "0.5.0",
     description = "Terminal library installer API - Generate install scripts for popular CLI tools",
     contact(
       name = "Termlibs",
